@@ -1,0 +1,20 @@
+[package]
+name = "hogehoge"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+resolver = "3"
+members = ["brickwork"]
+
+[[bin]]
+name = "2hoge"
+path = "src/main.rs"
+
+[dependencies]
+kameo = { version = "0.16", default-features = false, features = ["macros"] }
+winit = "0.30"
+
+brickwork = { path="./brickwork" }
+anyhow = "1"
+pollster = "0.4"

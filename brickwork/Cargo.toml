@@ -1,0 +1,11 @@
+[package]
+name = "brickwork"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bumpalo = "3"
+parley = "0.4"
+vello = "0.5"
+tokio = { version = "1", features = ["sync"] }
+smallvec = "1.15.0"
