@@ -1,8 +1,10 @@
 use ansi_term::Color;
 use anyhow::Result;
 use clap::Parser;
-use std::{path::PathBuf, process::Command};
-use wasm_opt::OptimizationOptions;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -37,7 +39,7 @@ fn main() -> Result<()> {
 
         let mut command = Command::new("cargo");
         command.arg("build");
-        command.arg("--target=wasm32-unknown-unknown");
+        command.arg("--target=wasm32-wasip1");
         command.current_dir(entry.path());
         command.arg("--target-dir").arg(&args.build_dir);
         command.stdout(std::process::Stdio::null());
@@ -60,42 +62,54 @@ fn main() -> Result<()> {
     }
     std::fs::create_dir_all(&args.out_dir)?;
 
-    println!("{}", Color::Blue.bold().paint("Optimizing plugins..."));
-
     let glob_pattern = format!(
-        "{}/wasm32-unknown-unknown/{}/*.wasm",
+        "{}/wasm32-wasip1/{}/*.wasm",
         args.build_dir.to_string_lossy(),
         if args.release { "release" } else { "debug" }
     );
 
-    for path in glob::glob(&glob_pattern).unwrap() {
-        let path = path?;
-        let size_before = path.metadata()?.len();
-        let name = path.file_name().unwrap();
+    if args.release {
+        println!("{}", Color::Blue.bold().paint("Optimizing plugins..."));
+    } else {
+        println!("{}", Color::Blue.bold().paint("Copying plugins..."));
+    }
+    for in_path in glob::glob(&glob_pattern).unwrap() {
+        let in_path = in_path?;
 
+        let name = in_path.file_name().unwrap();
         let out_path = args.out_dir.join(name);
 
-        let options = if args.release {
-            OptimizationOptions::new_opt_level_3()
+        if args.release {
+            optimize(&in_path, &out_path)?;
         } else {
-            OptimizationOptions::new_opt_level_1()
-        };
-
-        options
-            .run(&path, &out_path)
-            .map_err(|e| anyhow::anyhow!("Failed to optimize {:?}: {}", path, e))?;
-
-        let size_after = out_path.metadata()?.len();
-        println!(
-            "{}",
-            Color::Green.bold().paint(format!(
-                "Optimized {:?} from {:.1} KiB to {:.1} KiB",
-                name,
-                size_before as f64 / 1024.0,
-                size_after as f64 / 1024.0,
-            ))
-        );
+            std::fs::copy(&in_path, &out_path)?;
+        }
     }
+
+    Ok(())
+}
+
+fn optimize(in_path: &Path, out_path: &Path) -> Result<()> {
+    use wasm_opt::OptimizationOptions;
+
+    let name = in_path.file_name().unwrap();
+
+    let size_before = in_path.metadata()?.len();
+
+    OptimizationOptions::new_opt_level_3()
+        .run(&in_path, &out_path)
+        .map_err(|e| anyhow::anyhow!("Failed to optimize {:?}: {}", in_path, e))?;
+
+    let size_after = out_path.metadata()?.len();
+    println!(
+        "{}",
+        Color::Green.bold().paint(format!(
+            "Optimized {:?} from {:.1} KiB to {:.1} KiB",
+            name,
+            size_before as f64 / 1024.0,
+            size_after as f64 / 1024.0,
+        ))
+    );
 
     Ok(())
 }

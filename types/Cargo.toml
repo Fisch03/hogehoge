@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 extism-convert = { version = "1", default-features = false, features = ["msgpack"] }
+uuid = { version = "1", features = ["serde"] }
 serde.workspace = true

@@ -1,11 +1,5 @@
-use extism_convert::{FromBytes, Msgpack, ToBytes};
-use serde::{Deserialize, Serialize};
+pub mod library;
+pub use library::*;
 
-#[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
-#[encoding(Msgpack)]
-pub struct PluginMetadata {
-    pub name: String,
-    pub uuid: String,
-    pub description: Option<String>,
-    pub author: Option<String>,
-}
+pub mod plugin;
+pub use plugin::*;
