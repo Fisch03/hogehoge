@@ -179,6 +179,7 @@ CREATE TABLE tracks(
     FOREIGN KEY (track_group_id) REFERENCES track_groups(id),
 
     FOREIGN KEY (plugin_id) REFERENCES plugins(id),
+    UNIQUE (plugin_id, plugin_data),
 
     FOREIGN KEY (artist_id) REFERENCES artists(id),
     FOREIGN KEY (album_id) REFERENCES albums(id)

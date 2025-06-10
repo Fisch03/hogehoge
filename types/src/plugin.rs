@@ -1,3 +1,4 @@
+use crate::Tags;
 use extism_convert::{FromBytes, Msgpack, ToBytes};
 use serde::{Deserialize, Serialize};
 pub use uuid::{Uuid, uuid};
@@ -35,10 +36,8 @@ pub struct PreparedScan {
     pub tracks: Vec<PluginTrackIdentifier>,
 }
 
-#[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
+#[derive(Clone, Debug, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
-pub enum ScanResult {
-    Path(String),
-    File(Vec<u8>),
-    // Metadata(TrackMetadata),
+pub struct ScanResult {
+    pub tags: Tags,
 }

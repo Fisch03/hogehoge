@@ -4,6 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-extism-convert = { version = "1", default-features = false, features = ["msgpack"] }
 uuid = { version = "1", features = ["serde"] }
+extism-convert.workspace = true
 serde.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+tar.workspace = true
+
+tracing = { workspace = true, optional = true }
+
+[features]
+default = []
+tracing = ["dep:tracing"]

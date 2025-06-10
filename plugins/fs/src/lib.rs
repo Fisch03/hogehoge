@@ -1,10 +1,13 @@
 use std::path::Path;
+use thiserror::Error;
 
 use extism_pdk::{FnResult, plugin_fn};
 use hogehoge_types::{
     FsMount, PluginMetadata, PluginTrackIdentifier, PreparedScan, ScanResult, uuid,
 };
 use std::fs;
+
+mod tags;
 
 #[plugin_fn]
 pub fn get_metadata() -> FnResult<PluginMetadata> {
@@ -34,6 +37,13 @@ fn scan_recurse<P: AsRef<Path>>(tracks: &mut Vec<PluginTrackIdentifier>, path: P
     let path = path.as_ref();
 
     if path.is_file() {
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some("aac") | Some("ape") | Some("aiff") | Some("flac") | Some("mp3") | Some("mp4")
+            | Some("m4a") | Some("mpc") | Some("ogg") | Some("opus") | Some("wav")
+            | Some("wma") | Some("wvc") | Some("wv") => {}
+            _ => return Ok(()), // Unsupported file type, skip
+        }
+
         let path = path.to_string_lossy().to_string();
         let ident = PluginTrackIdentifier(path.clone());
         tracks.push(ident);
@@ -47,7 +57,22 @@ fn scan_recurse<P: AsRef<Path>>(tracks: &mut Vec<PluginTrackIdentifier>, path: P
     Ok(())
 }
 
+#[derive(Debug, Error)]
+enum ScanError {
+    #[error("File did not contain any tags")]
+    NoTags,
+}
+
 #[plugin_fn]
 pub fn scan(ident: PluginTrackIdentifier) -> FnResult<ScanResult> {
-    Ok(ScanResult::Path(ident.0))
+    use lofty::file::TaggedFileExt;
+
+    let path = Path::new(&ident.0);
+
+    let tagged_file = lofty::read_from_path(path)?;
+    let tag = tagged_file.primary_tag().ok_or_else(|| ScanError::NoTags)?;
+
+    let tags = tags::map_lofty_to_internal(tag);
+
+    Ok(ScanResult { tags })
 }

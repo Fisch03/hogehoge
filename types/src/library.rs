@@ -1,7 +1,6 @@
 use extism_convert::{FromBytes, Msgpack, ToBytes};
 use serde::{Deserialize, Serialize};
-
-use crate::{PluginId, PluginTrackIdentifier};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
@@ -41,7 +40,172 @@ pub struct TrackGroupId(i32);
 
 #[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
-pub struct Track {
+pub struct Tags(HashMap<TagKey, String>);
+
+impl Tags {
+    pub fn new() -> Self {
+        Tags(HashMap::new())
+    }
+}
+
+impl std::ops::Deref for Tags {
+    type Target = HashMap<TagKey, String>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for Tags {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, FromBytes, Serialize, Deserialize)]
+#[encoding(Msgpack)]
+#[non_exhaustive]
+pub enum TagKey {
+    // general
+    TrackTitle,
+    MusicBrainzWorkId,
+    MusicBrainzTrackId,
+    MusicBrainzRecordingId,
+    TrackSubtitle,
+    TrackTitleSortOrder,
+    Comment,
+    Description,
+    Language,
+    Script,
+    Lyrics,
+
+    // album
+    AlbumTitle,
+    SetSubtitle,
+    MusicBrainzReleaseId,
+    OriginalAlbumTitle,
+    AlbumTitleSortOrder,
+    AlbumArtist,
+    MusicBrainzReleaseArtistId,
+    ContentGroup,
+    MusicBrainzReleaseGroupId,
+
+    // artist
+    TrackArtist,
+    /// can occur multiple times
+    TrackArtists,
+    MusicBrainzArtistId,
+    OriginalArtist,
+    AlbumArtistSortOrder,
+    TrackArtistSortOrder,
+
+    // show
+    ShowName,
+    ShowNameSortOrder,
+
+    // style
+    Genre,
+    InitialKey,
+    Color,
+    Mood,
+    Bpm,
+
+    // urls
+    AudioFileUrl,
+    AudioSourceUrl,
+    CommercialInformationUrl,
+    CopyrightUrl,
+    TrackArtistUrl,
+    RadioStationUrl,
+    PaymentUrl,
+    PublisherUrl,
+
+    // numbering
+    DiscNumber,
+    DiscTotal,
+    TrackNumber,
+    TrackTotal,
+    Movement,
+    MovementNumber,
+    MovementTotal,
+
+    // dates
+    Year,
+    RecordingDate,
+    ReleaseDate,
+    OriginalReleaseDate,
+
+    // file
+    FileType,
+    FileOwner,
+    TaggingTime,
+    Length,
+    OriginalFileName,
+    OriginalMediaType,
+
+    // encoding
+    EncodedBy,
+    EncoderSoftware,
+    EncoderSettings,
+    EncodingTime,
+
+    // replaygain
+    ReplayGainAlbumGain,
+    ReplayGainAlbumPeak,
+    ReplayGainTrackGain,
+    ReplayGainTrackPeak,
+
+    // identification
+    Isrc,
+    Barcode,
+    CatalogNumber,
+    Work,
+
+    // flags
+    FlagCompilation,
+    FlagPodcast,
+
+    // legal
+    CopyrightMessage,
+    License,
+
+    // misc
+    Popularimeter,
+    ParentalAdvisory,
+
+    // people
+    Arranger,
+    Writer,
+    Composer,
+    ComposerSortOrder,
+    Conductor,
+    Director,
+    Engineer,
+    Lyricist,
+    OriginalLyricist,
+    MixDj,
+    MixEngineer,
+    MusicianCredits,
+    Performer,
+    Producer,
+    Publisher,
+    Label,
+    InternetRadioStationName,
+    InternetRadioStationOwner,
+    Remixer,
+
+    // podcast
+    PodcastDescription,
+    PodcastSeriesCategory,
+    PodcastUrl,
+    PodcastGlobalUniqueId,
+    PodcastKeywords,
+
+    Custom(String),
+}
+
+/*
+#[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
+#[encoding(Msgpack)]
+pub struct DBTrack {
     id: TrackId,
 
     track_group_id: TrackGroupId,
@@ -178,3 +342,4 @@ pub struct Track {
     internet_radio_station_owner: Option<String>,
     remixer: Option<String>,
 }
+*/

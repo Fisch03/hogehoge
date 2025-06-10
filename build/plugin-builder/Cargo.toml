@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ansi_term = "0.12.1"
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
-glob = "0.3.2"
+ansi_term.workspace = true
+clap.workspace = true
+glob.workspace = true
+anyhow.workspace = true
 wasm-opt = "0.116"

@@ -31,19 +31,20 @@ where
         event: &tracing::Event<'_>,
     ) -> std::fmt::Result {
         use ansi_term::{Color, Style};
+        let dimmed = Style::new().dimmed();
+        let bold = Style::new().bold().italic();
 
         let meta = event.metadata();
 
         let elapsed = self.start_time.elapsed();
 
-        let style = Style::new().dimmed();
         write!(
             writer,
             "{}{:06}.{:03}{}",
-            style.prefix(),
+            dimmed.prefix(),
             elapsed.as_secs(),
             elapsed.subsec_millis(),
-            style.suffix()
+            dimmed.suffix()
         )?;
 
         write!(
@@ -58,14 +59,33 @@ where
             }
         )?;
 
-        let style = Style::new().bold().italic();
         write!(
             writer,
-            "{}{}{} ",
-            style.prefix(),
-            meta.target(),
-            style.suffix()
+            "{} {} ",
+            dimmed.paint("at"),
+            bold.paint(meta.target())
         )?;
+
+        let span = event
+            .parent()
+            .and_then(|id| ctx.span(id))
+            .or_else(|| ctx.lookup_current());
+
+        let scope = span.into_iter().flat_map(|span| span.scope().from_root());
+
+        let mut first = true;
+        for span in scope {
+            if first {
+                write!(writer, "{}{} ", dimmed.paint("in"), bold.prefix())?;
+                first = false;
+            }
+
+            write!(writer, "{}:", span.metadata().name())?;
+        }
+        write!(writer, "{}", bold.suffix())?;
+        if !first {
+            write!(writer, " ")?;
+        }
 
         ctx.format_fields(writer.by_ref(), event)?;
 

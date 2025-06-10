@@ -1,16 +1,17 @@
 use extism::{Manifest, Plugin as LoadedPlugin, PluginBuilder};
-use hogehoge_types::{PluginMetadata, PreparedScan, Uuid};
+use hogehoge_types::{PluginMetadata, PluginTrackIdentifier, PreparedScan, ScanResult, Uuid};
 use std::{
     collections::{HashMap, VecDeque},
     ffi::OsStr,
     path::{Path, PathBuf},
-    sync::{Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex},
 };
 use thiserror::Error;
 use tracing::*;
 
+#[derive(Debug, Clone)]
 pub struct PluginSystem {
-    pub plugins: HashMap<Uuid, PluginPool>,
+    pub plugins: Arc<HashMap<Uuid, PluginPool>>,
 }
 
 #[derive(Debug, Error)]
@@ -19,6 +20,7 @@ pub enum PluginSystemError {
     InvalidDirectory(PathBuf),
 }
 
+#[derive(Debug)]
 pub struct PluginPool {
     metadata: PluginMetadata,
     plugin_path: PathBuf,
@@ -26,6 +28,7 @@ pub struct PluginPool {
     wait_condvar: Condvar,
 }
 
+#[derive(Debug)]
 pub struct Plugin(LoadedPlugin);
 
 pub struct PluginHandle<'a> {
@@ -42,9 +45,6 @@ pub enum PluginError {
     MissingRequiredFunction(&'static str),
     #[error("Failed to call function '{0}': {1}")]
     FunctionCallError(String, extism::Error),
-
-    #[error("Invalid plugin uuid")]
-    InvalidUuid,
 }
 
 impl Plugin {
@@ -54,6 +54,10 @@ impl Plugin {
 
     pub fn prepare_scan(&mut self) -> Result<PreparedScan, PluginError> {
         self.call("prepare_scan", ())
+    }
+
+    pub fn scan(&mut self, ident: &PluginTrackIdentifier) -> Result<ScanResult, PluginError> {
+        self.call("scan", ident)
     }
 
     #[instrument]
@@ -78,14 +82,14 @@ impl Plugin {
         Ok(plugin)
     }
 
-    fn call<T, R>(&mut self, function: &str, args: T) -> Result<R, PluginError>
+    fn call<'a, 'b, T, R>(&'b mut self, function: &str, args: T) -> Result<R, PluginError>
     where
-        T: for<'a> extism::ToBytes<'a>,
-        R: for<'a> extism::FromBytes<'a>,
+        T: extism::ToBytes<'a>,
+        R: extism::FromBytes<'b>,
     {
         self.0
             .call(function, args)
-            .map_err(|e| PluginError::FunctionCallError(function.to_string(), e))
+            .map_err(move |e| PluginError::FunctionCallError(function.to_string(), e))
     }
 }
 
@@ -102,21 +106,36 @@ impl PluginPool {
         })
     }
 
-    pub fn get_free_plugin(&self) -> Result<PluginHandle<'_>, PluginError> {
+    pub fn get_free_plugin(&self) -> PluginHandle<'_> {
         let mut plugins = self.plugins.lock().unwrap();
         if let Some(plugin) = plugins.pop_front() {
-            Ok(PluginHandle::new(self, plugin))
+            PluginHandle::new(self, plugin)
         } else {
-            if !self.metadata.allow_concurrency {
-                loop {
-                    plugins = self.wait_condvar.wait(plugins).unwrap();
-                    if let Some(plugin) = plugins.pop_front() {
-                        return Ok(PluginHandle::new(self, plugin));
+            if self.metadata.allow_concurrency {
+                info!(
+                    "Creating new instance for plugin: {} ({})",
+                    self.metadata.name, self.metadata.uuid
+                );
+                match Plugin::try_load(&self.plugin_path) {
+                    Ok(plugin) => {
+                        return PluginHandle::new(self, plugin);
+                    }
+
+                    Err(e) => {
+                        error!(
+                            "Failed to create instance of plugin, falling back to waiting for a free one: {}",
+                            e
+                        );
                     }
                 }
-            } else {
-                let new_plugin = Plugin::try_load(&self.plugin_path)?;
-                Ok(PluginHandle::new(self, new_plugin))
+            }
+
+            // wait for a free plugin
+            loop {
+                plugins = self.wait_condvar.wait(plugins).unwrap();
+                if let Some(plugin) = plugins.pop_front() {
+                    return PluginHandle::new(self, plugin);
+                }
             }
         }
     }
@@ -189,17 +208,25 @@ impl PluginSystem {
                 }
             };
 
-            plugins.insert(pool.metadata.uuid.clone(), pool);
+            plugins.insert(pool.metadata.uuid, pool);
         }
 
-        Ok(PluginSystem { plugins })
+        Ok(PluginSystem {
+            plugins: Arc::new(plugins),
+        })
     }
 
-    pub fn get_free_plugin(&mut self, uuid: &Uuid) -> Result<PluginHandle<'_>, PluginError> {
-        if let Some(pool) = self.plugins.get_mut(uuid) {
-            pool.get_free_plugin()
-        } else {
-            Err(PluginError::InvalidUuid)
+    pub fn get_free_plugin(&self, uuid: Uuid) -> Option<PluginHandle<'_>> {
+        self.plugins.get(&uuid).map(|pool| pool.get_free_plugin())
+    }
+
+    pub fn cleanup_pool(&self) {
+        debug!("Cleaning up plugin pool...");
+        for pool in self.plugins.values() {
+            let mut plugins = pool.plugins.lock().unwrap();
+            while plugins.len() > 1 {
+                plugins.pop_back();
+            }
         }
     }
 }

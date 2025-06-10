@@ -9,4 +9,6 @@ crate-type = ["cdylib"]
 [dependencies]
 extism-pdk = "1"
 serde.workspace = true
+lofty.workspace = true
+thiserror.workspace = true
 hogehoge-types = { path = "../../types" }

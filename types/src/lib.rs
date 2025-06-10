@@ -3,3 +3,6 @@ pub use library::*;
 
 pub mod plugin;
 pub use plugin::*;
+
+pub mod theme;
+pub use theme::*;

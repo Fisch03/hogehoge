@@ -1,0 +1,19 @@
+name = "ferra"
+
+[colors]
+background = "#383539"
+foreground = "#fecdb2"
+
+container = "#2b292d"
+border = "#fecdb2"
+
+button-idle = "#383539"
+button-hover = "#282828"
+button-press= "#141414"
+
+success = "#b1b695"
+warning = "#f5d76e"
+error = "#e06b75"
+
+[icons]
+background-task-running = "background-task-running.svg"
