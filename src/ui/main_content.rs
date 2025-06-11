@@ -16,6 +16,6 @@ pub fn ContentTab() -> Element {
         width: "fill",
         height: "fill",
         background: theme.colors.container,
-        corner_radius: "16",
+        corner_radius: "8",
     })
 }

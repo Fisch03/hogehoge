@@ -50,18 +50,14 @@ fn app() -> Element {
         height: "100%",
         background: theme.colors.background,
         color: theme.colors.foreground,
-        padding: "16",
-        spacing: "8",
-        TopBar {},
         PlayerBar {},
-        MainContent {},
+        rect {
+            height: "calc(100% - 16 - 32)", // 16 for status bar, 48 for player bar
+            width: "100%",
+            direction: "horizontal",
+            SideBar {},
+            MainContent {},
+        }
+        StatusBar {},
     })
-
-    // rsx!(for state in task_states.read().values() {
-    //     ProgressBar {
-    //         width: "100%",
-    //         progress: state.progress * 100.0,
-    //         show_progress: true,
-    //     }
-    // })
 }

@@ -6,8 +6,10 @@ pub use background_task::{
     BackgroundTaskHandle, BackgroundTaskState, TaskHandler, use_task_handler,
 };
 
-mod top_bar;
-pub use top_bar::TopBar;
+mod status_bar;
+pub use status_bar::StatusBar;
+mod side_bar;
+pub use side_bar::SideBar;
 mod player;
 pub use player::PlayerBar;
 mod main_content;

@@ -1,10 +1,10 @@
 use crate::ui::*;
 
 #[component]
-pub fn TopBar() -> Element {
+pub fn StatusBar() -> Element {
     rsx!(rect {
         width: "100%",
-        height: "32",
+        height: "16",
         direction: "horizontal",
         cross_align: "center",
 
@@ -35,8 +35,6 @@ fn CenterSection() -> Element {
 
 #[component]
 fn RightSection() -> Element {
-    let task_handler = use_context::<TaskHandler>();
-
     rsx!(rect {
         width: "25%",
         main_align: "end",
