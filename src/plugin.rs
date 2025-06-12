@@ -63,7 +63,7 @@ impl Plugin {
     #[instrument]
     fn try_load(path: &Path) -> Result<Self, PluginError> {
         let manifest = Manifest::new([path.to_path_buf()])
-            .with_allowed_path("/home/sakanaa/nas/Audio/Music/".to_string(), "music");
+            .with_allowed_path("C:\\Users\\Lars\\Downloads\\slumberparty dancefloor".to_string(), "music");
 
         let plugin = PluginBuilder::new(manifest)
             .with_wasi(true)
@@ -210,6 +210,8 @@ impl PluginSystem {
 
             plugins.insert(pool.metadata.uuid, pool);
         }
+
+        info!("Loaded {} plugins", plugins.len());
 
         Ok(PluginSystem {
             plugins: Arc::new(plugins),

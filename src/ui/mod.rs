@@ -1,10 +1,8 @@
 pub use freya::prelude::*;
 pub use hogehoge_types::theme::{PartialTheme, Theme};
 
-pub mod background_task;
-pub use background_task::{
-    BackgroundTaskHandle, BackgroundTaskState, TaskHandler, use_task_handler,
-};
+pub mod notifications;
+pub use notifications::{use_notification_provider, ToastNotificationTarget, NotificationManager, Notification};
 
 mod status_bar;
 pub use status_bar::StatusBar;

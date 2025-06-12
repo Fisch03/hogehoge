@@ -5,7 +5,7 @@ use rayon::{ThreadPool, prelude::*};
 use tracing::*;
 
 use crate::plugin::PluginSystem;
-use crate::ui::background_task::*;
+use crate::ui::notifications::*;
 
 #[derive(Debug, Clone)]
 pub struct Library {
@@ -31,12 +31,8 @@ impl Library {
     }
 
     #[instrument(skip_all)]
-    pub fn scan(self, plugin_system: PluginSystem) -> BackgroundTaskHandle {
-        let (task, task_handle) = BackgroundTaskHandle::new(BackgroundTaskState {
-            name: "Music Scan".to_string(),
-            message: "Preparing scan...".to_string(),
-            ..Default::default()
-        });
+    pub fn scan(self, plugin_system: PluginSystem) -> Notification {
+        let (notification, notification_handle) = Notification::new_progress("Music Scan");
 
         info!("Starting music scan...");
         let parent_span = Span::current();
@@ -67,7 +63,7 @@ impl Library {
                         }
                     };
 
-                    task_handle.modify_state(|state| {
+                    notification_handle.modify_state(|state| {
                         state.progress += 50.0 / plugin_count as f32;
                     });
 
@@ -80,9 +76,9 @@ impl Library {
                 .fold(0, |acc, (_, scan)| acc + scan.tracks.len());
             info!("Found {} tracks to scan", tracks_count);
 
-            task_handle.modify_state(|state| {
+            notification_handle.modify_state(|state| {
                 state.progress = 50.0;
-                state.message = "Scanning tracks...".to_string();
+                state.message = "Scanning tracks...".into();
             });
 
             // TODO: prefer scanning tracks that are not already in the library
@@ -103,7 +99,7 @@ impl Library {
                             }
                         }
 
-                        task_handle.modify_state(|state| {
+                        notification_handle.modify_state(|state| {
                             state.progress += 50.0 / tracks_count as f32;
                         });
                     });
@@ -112,10 +108,10 @@ impl Library {
             plugin_system.cleanup_pool();
             info!("Music scan completed.");
 
-            task_handle.complete();
+            notification_handle.complete();
         });
 
-        task
+        notification
     }
 
     #[instrument]

@@ -41,15 +41,16 @@ fn app() -> Element {
     let plugin_system =
         use_context_provider(|| PluginSystem::initialize(args.plugin_dir.clone()).unwrap());
 
-    let task_handler = use_task_handler();
+    let notifications = use_notification_provider();
 
-    use_hook(|| task_handler.start(library.scan(plugin_system)));
+    use_hook(|| notifications.add(library.scan(plugin_system)));
 
     rsx!(rect {
         width: "100%",
         height: "100%",
         background: theme.colors.background,
         color: theme.colors.foreground,
+        StatusBar {},
         PlayerBar {},
         rect {
             height: "calc(100% - 16 - 32)", // 16 for status bar, 48 for player bar
@@ -57,7 +58,7 @@ fn app() -> Element {
             direction: "horizontal",
             SideBar {},
             MainContent {},
-        }
-        StatusBar {},
+        },
+        ToastNotificationTarget { },
     })
 }
