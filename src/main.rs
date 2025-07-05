@@ -1,5 +1,7 @@
 use clap::Parser;
+use hogehoge_db::Database;
 use std::path::PathBuf;
+use tokio::task;
 
 mod library;
 use library::Library;
@@ -14,6 +16,8 @@ use ui::*;
 
 #[derive(Debug, Clone, Parser)]
 struct Args {
+    #[clap(long, short, default_value = "2hoge.db")]
+    db_path: PathBuf,
     #[arg(long, short, default_value = "./plugins")]
     plugin_dir: PathBuf,
     #[arg(long, short, default_value = "./themes")]
@@ -26,30 +30,23 @@ fn main() {
 
     let args = Args::parse();
 
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _guard = rt.enter();
+
     launch_cfg(
         app,
         LaunchConfig::new().with_title("2hoge").with_state(args),
     );
 }
 
+use std::sync::OnceLock;
+static DB: OnceLock<Database> = OnceLock::new();
+
 fn app() -> Element {
-    let args = use_context::<Args>();
-
-    let theme = use_context_provider(|| ui::DEFAULT_THEME.clone());
-
-    let library = use_context_provider(|| Library::new());
-    let plugin_system =
-        use_context_provider(|| PluginSystem::initialize(args.plugin_dir.clone()).unwrap());
-
-    let notifications = use_notification_provider();
-
-    use_hook(|| notifications.add(library.scan(plugin_system)));
-
-    rsx!(rect {
-        width: "100%",
-        height: "100%",
-        background: theme.colors.background,
-        color: theme.colors.foreground,
+    rsx!(AppWrapper { ContextProvider {
         StatusBar {},
         PlayerBar {},
         rect {
@@ -60,5 +57,76 @@ fn app() -> Element {
             MainContent {},
         },
         ToastNotificationTarget { },
+    }})
+}
+
+#[component]
+fn AppWrapper(children: Element) -> Element {
+    let theme = use_context_provider(|| ui::DEFAULT_THEME.clone());
+
+    rsx!(rect {
+        width: "100%",
+        height: "100%",
+        background: theme.colors.background,
+        color: theme.colors.foreground,
+        SuspenseBoundary {
+            fallback: |ctx: SuspenseContext| rsx!(
+                rect {
+                    width: "100%",
+                    height: "100%",
+                    cross_align: "center",
+                    main_align: "center",
+                    {
+                        ctx.suspense_placeholder().unwrap_or_else(|| {
+                            rsx!(label {
+                                font_size: "16",
+                                "Loading...",
+                            })
+                        })
+                    }
+                }
+            ),
+            children
+        }
     })
+}
+
+#[component]
+fn ContextProvider(children: Element) -> Element {
+    let args = use_context::<Args>();
+
+    use_resource_provider("Database", move || {
+        let db_path = args.db_path.clone();
+        async {
+            let db = Database::connect(db_path)
+                .await
+                .expect("Failed to open database");
+
+            match DB.set(db.clone()) {
+                Ok(_) => tracing::info!("Database initialized successfully"),
+                Err(_) => tracing::warn!("Database was initialized twice!"),
+            }
+
+            db
+        }
+    });
+
+    use_resource_provider("Library", || async {
+        let db = task::spawn_blocking(|| DB.wait()).await.unwrap();
+        Library::new(db.clone()).await
+    });
+
+    use_resource_provider("Plugin System", move || {
+        let plugin_dir = args.plugin_dir.clone();
+        async move {
+            let db = task::spawn_blocking(|| DB.wait()).await.unwrap();
+            PluginSystem::initialize(plugin_dir, db.clone())
+                .await
+                .expect("Failed to initialize plugin system")
+        }
+    });
+
+    use_notification_provider();
+
+    children
 }

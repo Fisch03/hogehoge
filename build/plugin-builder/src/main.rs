@@ -1,6 +1,6 @@
-use ansi_term::Color;
 use anyhow::Result;
 use clap::Parser;
+use nu_ansi_term::Color;
 use std::{
     path::{Path, PathBuf},
     process::Command,

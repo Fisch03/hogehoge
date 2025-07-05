@@ -70,7 +70,7 @@ pub fn scan(ident: PluginTrackIdentifier) -> FnResult<ScanResult> {
     let path = Path::new(&ident.0);
 
     let tagged_file = lofty::read_from_path(path)?;
-    let tag = tagged_file.primary_tag().ok_or_else(|| ScanError::NoTags)?;
+    let tag = tagged_file.primary_tag().ok_or(ScanError::NoTags)?;
 
     let tags = tags::map_lofty_to_internal(tag);
 

@@ -5,11 +5,17 @@ pub use uuid::{Uuid, uuid};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
-pub struct PluginId(i32);
+pub struct PluginId(pub i64);
 
 #[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
 pub struct PluginTrackIdentifier(pub String);
+
+#[derive(Debug, Clone)]
+pub struct UniqueTrackIdentifier {
+    pub plugin: PluginId,
+    pub plugin_data: PluginTrackIdentifier,
+}
 
 #[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]

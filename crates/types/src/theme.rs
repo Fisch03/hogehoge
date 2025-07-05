@@ -60,27 +60,20 @@ macro_rules! make_theme {
             $(pub $icon: Vec<u8>,)*
         }
 
-
         impl Theme {
             pub fn from_partial(partial: PartialTheme) -> Option<Self> {
                 Some(Self {
                     colors: ThemeColors {
                         $(
                             $color: {
-                                let Some(color) = partial.colors.$color else {
-                                    return None;
-                                };
-                                color
+                                partial.colors.$color?
                             },
                         )*
                     },
                     icons: ThemeIcons {
                         $(
                             $icon:  {
-                                let Some(icon) = partial.icons.$icon else {
-                                    return None;
-                                };
-                                icon
+                                partial.icons.$icon?
                             },
                         )*
                     },

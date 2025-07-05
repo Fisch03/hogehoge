@@ -1,4 +1,5 @@
 use crate::ui::*;
+use crate::{Library, PluginSystem};
 
 #[component]
 pub fn MainContent() -> Element {
@@ -12,7 +13,11 @@ pub fn MainContent() -> Element {
 #[component]
 pub fn ContentTab() -> Element {
     let theme = use_context::<Theme>();
+
+    let library = use_context_resource::<Library>()?;
+    let plugin_system = use_context_resource::<PluginSystem>()?;
     let notifications = use_context::<NotificationManager>();
+    use_hook(|| notifications.add(library.read().scan(plugin_system.read().clone())));
 
     rsx!(rect {
         width: "fill",

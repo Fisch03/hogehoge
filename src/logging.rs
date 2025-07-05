@@ -30,7 +30,7 @@ where
         mut writer: Writer<'_>,
         event: &tracing::Event<'_>,
     ) -> std::fmt::Result {
-        use ansi_term::{Color, Style};
+        use nu_ansi_term::{Color, Style};
         let dimmed = Style::new().dimmed();
         let bold = Style::new().bold().italic();
 

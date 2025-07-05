@@ -1,10 +1,14 @@
+use crate::plugin::UniqueTrackIdentifier;
 use extism_convert::{FromBytes, Msgpack, ToBytes};
+use sea_query::Iden;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use strum::Display;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
-pub struct ArtistId(i32);
+pub struct ArtistId(pub i64);
 
 #[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
@@ -17,34 +21,69 @@ pub struct Artist {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
-pub struct AlbumId(i32);
+pub struct AlbumId(pub i64);
 
 #[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
 pub struct Album {
-    id: AlbumId,
-    mbid: Option<String>,
-
     title: String,
 
+    mbid: Option<String>,
     artist_id: Option<ArtistId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
-pub struct TrackId(i32);
+pub struct TrackId(pub i64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
-pub struct TrackGroupId(i32);
+pub struct TrackGroupId(pub i64);
 
-#[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
-pub struct Tags(HashMap<TagKey, String>);
-
+pub struct Tags(pub HashMap<TagKey, String>);
 impl Tags {
     pub fn new() -> Self {
         Tags(HashMap::new())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Track {
+    pub title: String,
+    pub identifier: UniqueTrackIdentifier,
+    pub tags: Tags,
+}
+#[derive(Debug, Clone, Error)]
+pub enum TrackError {
+    #[error("Missing required tag {0}")]
+    MissingRequiredTag(TagKey),
+}
+impl Track {
+    pub fn new(identifier: UniqueTrackIdentifier, title: String) -> Self {
+        let tags = Tags::new();
+
+        Track {
+            title,
+            identifier,
+            tags,
+        }
+    }
+
+    pub fn from_tags(
+        identifier: UniqueTrackIdentifier,
+        mut tags: Tags,
+    ) -> Result<Self, TrackError> {
+        let title = tags
+            .remove(&TagKey::TrackTitle)
+            .ok_or(TrackError::MissingRequiredTag(TagKey::TrackTitle))?;
+
+        Ok(Track {
+            title,
+            identifier,
+            tags,
+        })
     }
 }
 
@@ -60,7 +99,7 @@ impl std::ops::DerefMut for Tags {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, FromBytes, Serialize, Deserialize)]
+#[derive(Debug, Display, Iden, Clone, PartialEq, Eq, Hash, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
 #[non_exhaustive]
 pub enum TagKey {

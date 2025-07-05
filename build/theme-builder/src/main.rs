@@ -1,7 +1,7 @@
-use ansi_term::Color;
 use anyhow::{Context, Result};
 use clap::Parser;
 use hogehoge_types::{PartialTheme, PartialThemeManifest};
+use nu_ansi_term::Color;
 use std::{fs::File, path::PathBuf};
 
 #[derive(Debug, Parser)]

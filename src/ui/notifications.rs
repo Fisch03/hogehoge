@@ -1,13 +1,16 @@
 use crate::ui::*;
-use futures::stream::{StreamExt};
-use std::{collections::HashMap, sync::atomic::{AtomicUsize, Ordering}};
-use tokio::{time, sync::watch};
+use futures::stream::StreamExt;
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+use tokio::{sync::watch, time};
 use tokio_stream::wrappers::WatchStream;
 
 #[derive(Debug, Clone)]
 pub struct NotificationManager {
-    pub notifications: Signal<HashMap<usize, NotificationState>>,
-    pub add_notification: Callback<Notification>,
+    notifications: Signal<HashMap<usize, NotificationState>>,
+    add_notification: Callback<Notification>,
 }
 #[derive(Debug, Clone)]
 pub struct Notification {
@@ -21,7 +24,7 @@ pub enum NotificationKind {
         message: Cow<'static, str>,
         silent: bool,
     },
-    Progress(watch::Receiver<ProgressNotificationData>)
+    Progress(watch::Receiver<ProgressNotificationData>),
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -44,9 +47,7 @@ struct NotificationState {
 
 #[derive(Debug, Clone, PartialEq)]
 enum NotificationStateKind {
-    Fixed {
-        message: Cow<'static, str>,
-    },
+    Fixed { message: Cow<'static, str> },
     Progress(ProgressNotificationData),
 }
 
@@ -67,7 +68,10 @@ impl Notification {
 
         Self {
             title,
-            kind: NotificationKind::Fixed { message, silent: false },
+            kind: NotificationKind::Fixed {
+                message,
+                silent: false,
+            },
         }
     }
 
@@ -75,19 +79,22 @@ impl Notification {
     where
         T: Into<Cow<'static, str>>,
         M: Into<Cow<'static, str>>,
-        
     {
         let title = title.into();
         let message = message.into();
         Self {
             title,
-            kind: NotificationKind::Fixed { message, silent: true },
+            kind: NotificationKind::Fixed {
+                message,
+                silent: true,
+            },
         }
     }
 
-    pub fn new_progress<T>(
-        title: T,
-    ) -> (Self, ProgressNotificationHandle) where T: Into<Cow<'static, str>> {
+    pub fn new_progress<T>(title: T) -> (Self, ProgressNotificationHandle)
+    where
+        T: Into<Cow<'static, str>>,
+    {
         let title = title.into();
 
         let (tx, rx) = watch::channel(ProgressNotificationData::default());
@@ -118,62 +125,56 @@ impl ProgressNotificationHandle {
 }
 
 pub fn use_notification_provider() -> NotificationManager {
-    let mut notifications = use_signal(|| HashMap::new());
-    
-    let add_notification =
-        use_callback(move |notification: Notification| {
-            static NOTIFICATION_ID: AtomicUsize = AtomicUsize::new(0);
-            let id = NOTIFICATION_ID.fetch_add(1, Ordering::SeqCst);
+    let mut notifications: Signal<HashMap<usize, NotificationState>> = use_signal(HashMap::new);
 
-            let (show_toast, state_kind) = match notification.kind {
-                NotificationKind::Fixed { message, silent } => { 
-                    spawn(async move {
-                        time::sleep(time::Duration::from_secs(5)).await;
-                        notifications.write().get_mut(&id).map(|state: &mut NotificationState| {
-                            state.show_toast = false;
-                        });
-                    });
+    let add_notification = use_callback(move |notification: Notification| {
+        static NOTIFICATION_ID: AtomicUsize = AtomicUsize::new(0);
+        let id = NOTIFICATION_ID.fetch_add(1, Ordering::SeqCst);
 
-                    (!silent, NotificationStateKind::Fixed {message})
-                }
-                NotificationKind::Progress(handle) => {
-                    let initial_data = handle.borrow().clone();
+        let (show_toast, state_kind) = match notification.kind {
+            NotificationKind::Fixed { message, silent } => {
+                spawn(async move {
+                    time::sleep(time::Duration::from_secs(5)).await;
+                    if let Some(state) = notifications.write().get_mut(&id) {
+                        state.show_toast = false;
+                    }
+                });
 
-                    let mut stream = WatchStream::new(handle);
-                    spawn(async move {
-                        while let Some(data) = stream.next().await {
-                            notifications.write().get_mut(&id).map(|state: &mut NotificationState| {
-                                if data.is_done && state.show_toast {
-                                    state.show_toast = false;   
-                                }
+                (!silent, NotificationStateKind::Fixed { message })
+            }
+            NotificationKind::Progress(handle) => {
+                let initial_data = handle.borrow().clone();
 
-                                state.kind = NotificationStateKind::Progress(data);
-                            });
+                let mut stream = WatchStream::new(handle);
+                spawn(async move {
+                    while let Some(data) = stream.next().await {
+                        if let Some(state) = notifications.write().get_mut(&id) {
+                            if data.is_done && state.show_toast {
+                                state.show_toast = false;
+                            }
 
+                            state.kind = NotificationStateKind::Progress(data);
                         }
-                    });
+                    }
+                });
 
-                    (true, NotificationStateKind::Progress(initial_data))
-                }
-            };
+                (true, NotificationStateKind::Progress(initial_data))
+            }
+        };
 
-            let state = NotificationState {
-                id,
-                title: notification.title,
-                show_toast,
-                kind: state_kind,
-            };
+        let state = NotificationState {
+            id,
+            title: notification.title,
+            show_toast,
+            kind: state_kind,
+        };
 
-            notifications.write().insert(id, state);
+        notifications.write().insert(id, state);
+    });
 
-
-        });
-
-    use_context_provider(move || {
-        NotificationManager {
-            notifications: notifications,
-            add_notification: add_notification,
-        }
+    use_context_provider(move || NotificationManager {
+        notifications,
+        add_notification,
     })
 }
 
@@ -183,12 +184,12 @@ pub fn ToastNotificationTarget() -> Element {
 
     let notifications = manager.notifications.read();
 
-    let mut toast_notifications = notifications.values()
+    let mut toast_notifications = notifications
+        .values()
         .filter(|state| state.show_toast)
         .cloned()
         .collect::<Vec<_>>();
     toast_notifications.sort_by_key(|state| state.id);
-    
 
     rsx!(rect {
         position: "global",
@@ -208,7 +209,8 @@ fn ToastNotification(notification: NotificationState) -> Element {
 
     let animation = use_animation(|conf| {
         conf.auto_start(true);
-        AnimNum::new(400.0, 0.0).time(300)
+        AnimNum::new(400.0, 0.0)
+            .time(300)
             .ease(Ease::Out)
             .function(Function::Cubic)
     });

@@ -1,33 +1,49 @@
-[package]
-name = "hogehoge"
-version = "0.1.0"
-edition = "2024"
-
 [workspace]
 resolver = "3"
-members = [ "build/*","plugins/*", "types"]
+members = [ "build/*", "plugins/*", "crates/*"]
+
+# [patch.crates-io]
+# extism = { git = "https://github.com/Fisch03/extism" }
+# extism-convert = { git = "https://github.com/Fisch03/extism" }
+# extism-pdk = { git = "https://github.com/Fisch03/rust-pdk" }
 
 [workspace.dependencies]
+hogehoge-types = { path = "crates/types" }
+hogehoge-db = { path = "crates/db" }
+
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing = "0.1"
-futures = "0.3"
-ansi_term = "0.12"
+futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+futures-util = { version = "0.3" }
 
 serde = { version = "1", features = ["derive"] }
 
 lofty = "0.22"
 
 thiserror = "2"
+strum = { version = "0.27", features = ["derive"] }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+nu-ansi-term = "0.50"
 
-extism-convert = { version = "1", default-features = false, features = ["msgpack"] }
+extism = { git = "https://github.com/Fisch03/extism", default-features = false, features = [ "register-filesystem", "msgpack" ] }
+extism-convert = { git = "https://github.com/Fisch03/extism", default-features = false, features = ["msgpack"] }
+extism-pdk = { git = "https://github.com/Fisch03/rust-pdk", default-features = false, features = ["msgpack"] }
+
+sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "sqlite", "derive", "migrate", "macros" ] }
+sea-query = { version = "0.32", default-features = false, features = ["derive", "backend-sqlite"] }
+sea-query-binder = { version = "0.7", features = ["sqlx-sqlite"] }
 
 glob = "0.3"
 
 toml = "0.8"
 tar = "0.4"
+
+[package]
+name = "hogehoge"
+version = "0.1.0"
+edition = "2024"
 
 [[bin]]
 name = "2hoge"
@@ -36,29 +52,30 @@ path = "src/main.rs"
 [profile.dev.package."*"]
 opt-level = 3
 
+[profile.release]
+# lto = true
+# codegen-units = 1
+
 [dependencies]
-hogehoge-types = { path = "types", features = ["tracing"] }
+hogehoge-types.workspace = true
+hogehoge-db.workspace = true
+extism.workspace = true
 
 tokio.workspace = true
 tokio-stream.workspace = true
-futures.workspace = true
-
 tracing.workspace = true
 tracing-subscriber = "0.3"
-ansi_term.workspace = true
+futures.workspace = true
+futures-util.workspace = true
+
 
 clap.workspace = true
+nu-ansi-term.workspace = true
 
 serde.workspace = true
 
-extism = "1"
-
-freya = { version = "0.3", features = [] }
-
-sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "sqlite", "derive", "migrate", "macros" ] }
+freya = { version = "0.3", features = ["custom-tokio-rt"] }
 
 rayon = "1"
 
 thiserror.workspace = true
-
-

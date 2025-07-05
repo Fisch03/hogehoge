@@ -1,28 +1,28 @@
 CREATE TABLE plugins(
-    id INTEGER NOT NULL PRIMARY KEY,
-    uuid TEXT NOT NULL,
+    plugin_id INTEGER NOT NULL PRIMARY KEY,
+    uuid TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE artists(
-	id INTEGER NOT NULL PRIMARY KEY,
+	artist_id INTEGER NOT NULL PRIMARY KEY,
 	mbid TEXT,
 	name TEXT NOT NULL
 );
 
 CREATE TABLE albums(
-	id INTEGER NOT NULL PRIMARY KEY,
+	album_id INTEGER NOT NULL PRIMARY KEY,
 	mbid TEXT,
 	title TEXT NOT NULL,
 	artist_id INTEGER,
-	FOREIGN KEY (artist_id) REFERENCES artists(id)
+	FOREIGN KEY (artist_id) REFERENCES artists(artist_id)
 );
 
 CREATE TABLE track_groups(
-    id INTEGER NOT NULL PRIMARY KEY,
+    track_group_id INTEGER NOT NULL PRIMARY KEY
 );
 
 CREATE TABLE tracks(
-    id INTEGER NOT NULL PRIMARY KEY,
+    track_id INTEGER NOT NULL PRIMARY KEY,
     
     track_group_id INTEGER NOT NULL,
 
@@ -30,15 +30,16 @@ CREATE TABLE tracks(
     plugin_data TEXT,
 
     artist_id INTEGER,
+    album_artist_id INTEGER,
     album_id INTEGER,
 
     -- general
-    title TEXT,
-    mb_work_id TEXT,
-    mb_track_id TEXT,
-    mb_recording_id TEXT,
+    track_title TEXT,
+    music_brainz_work_id TEXT,
+    music_brainz_track_id TEXT,
+    music_brainz_recording_id TEXT,
     subtitle TEXT,
-    title_sort_order TEXT,
+    track_title_sort_order TEXT,
 
     comment TEXT,
     description TEXT,
@@ -49,23 +50,22 @@ CREATE TABLE tracks(
     -- album
     album_title TEXT,
     set_subtitle TEXT,
-    mb_release_id TEXT,
+    music_brainz_release_group_id TEXT,
+    music_brainz_release_id TEXT,
     original_album_title TEXT,
     album_title_sort_order TEXT,
 
-    album_artist TEXT,
-    mb_release_artist_id TEXT,
+    music_brainz_release_artist_id TEXT,
     album_artist_sort_order TEXT,
 
     content_group TEXT,
-    mb_release_group_id TEXT,
 
     -- artist
-    artist TEXT,
-    artists TEXT,
-    mb_artist_id TEXT,
+    -- track_artist TEXT,
+    track_artists TEXT,
+    music_brainz_artist_id TEXT,
     original_artist TEXT,
-    artist_sort_order TEXT,
+    track_artist_sort_order TEXT,
 
     -- show
     show_name TEXT,
@@ -114,19 +114,20 @@ CREATE TABLE tracks(
     -- encoding
     encoded_by TEXT,
     encoder_software TEXT,
-    encoding_settings TEXT,
+    encoder_settings TEXT,
     encoding_time TEXT,
 
-    -- replaygain
-    replaygain_album_gain TEXT,
-    replaygain_album_peak TEXT,
-    replaygain_track_gain TEXT,
-    replaygain_track_peak TEXT,
+    -- replay_gain
+    replay_gain_album_gain TEXT,
+    replay_gain_album_peak TEXT,
+    replay_gain_track_gain TEXT,
+    replay_gain_track_peak TEXT,
 
     -- identification
-    irsc TEXT,
+    isrc TEXT,
     barcode TEXT,
     catalog_number TEXT,
+    work TEXT,
 
     -- flags
     flag_compilation TEXT,
@@ -176,13 +177,13 @@ CREATE TABLE tracks(
 
     remixer TEXT,
 
-    FOREIGN KEY (track_group_id) REFERENCES track_groups(id),
+    FOREIGN KEY (track_group_id) REFERENCES track_groups(track_group_id),
 
-    FOREIGN KEY (plugin_id) REFERENCES plugins(id),
+    FOREIGN KEY (plugin_id) REFERENCES plugins(plugin_id),
     UNIQUE (plugin_id, plugin_data),
 
-    FOREIGN KEY (artist_id) REFERENCES artists(id),
-    FOREIGN KEY (album_id) REFERENCES albums(id)
+    FOREIGN KEY (artist_id) REFERENCES artists(artist_id),
+    FOREIGN KEY (album_id) REFERENCES albums(album_id)
 );
 
 

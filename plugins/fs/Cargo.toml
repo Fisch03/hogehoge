@@ -7,8 +7,8 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-extism-pdk = "1"
+extism-pdk.workspace = true
 serde.workspace = true
 lofty.workspace = true
 thiserror.workspace = true
-hogehoge-types = { path = "../../types" }
+hogehoge-types.workspace = true

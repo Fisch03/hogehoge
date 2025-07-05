@@ -1,2 +1,3 @@
 target
 built-plugins
+*.db

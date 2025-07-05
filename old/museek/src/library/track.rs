@@ -4,7 +4,7 @@ use sqlx::{Database, FromRow, SqlitePool};
 use std::path::Path;
 use tracing::warn;
 
-pub struct TrackId(i32);
+pub struct TrackId(i64);
 
 #[derive(Debug, Default, FromRow, InsertRow)]
 #[table("tracks")]

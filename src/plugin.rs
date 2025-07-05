@@ -1,5 +1,6 @@
 use extism::{Manifest, Plugin as LoadedPlugin, PluginBuilder};
-use hogehoge_types::{PluginMetadata, PluginTrackIdentifier, PreparedScan, ScanResult, Uuid};
+use hogehoge_db::Database;
+use hogehoge_types::{PluginId, PluginMetadata, PluginTrackIdentifier, PreparedScan, ScanResult};
 use std::{
     collections::{HashMap, VecDeque},
     ffi::OsStr,
@@ -11,7 +12,7 @@ use tracing::*;
 
 #[derive(Debug, Clone)]
 pub struct PluginSystem {
-    pub plugins: Arc<HashMap<Uuid, PluginPool>>,
+    pub plugins: Arc<HashMap<PluginId, PluginPool>>,
 }
 
 #[derive(Debug, Error)]
@@ -22,7 +23,7 @@ pub enum PluginSystemError {
 
 #[derive(Debug)]
 pub struct PluginPool {
-    metadata: PluginMetadata,
+    pub metadata: PluginMetadata,
     plugin_path: PathBuf,
     plugins: Mutex<VecDeque<Plugin>>,
     wait_condvar: Condvar,
@@ -63,7 +64,7 @@ impl Plugin {
     #[instrument]
     fn try_load(path: &Path) -> Result<Self, PluginError> {
         let manifest = Manifest::new([path.to_path_buf()])
-            .with_allowed_path("C:\\Users\\Lars\\Downloads\\slumberparty dancefloor".to_string(), "music");
+            .with_allowed_path("/home/sakanaa/nas/Audio/Music/".to_string(), "music");
 
         let plugin = PluginBuilder::new(manifest)
             .with_wasi(true)
@@ -77,7 +78,7 @@ impl Plugin {
         let mut plugin = Plugin(plugin);
 
         let metadata = plugin.get_metadata()?;
-        plugin.0.id = metadata.uuid.clone();
+        plugin.0.id = metadata.uuid;
 
         Ok(plugin)
     }
@@ -179,7 +180,7 @@ impl Drop for PluginHandle<'_> {
 
 impl PluginSystem {
     #[instrument]
-    pub fn initialize(plugin_dir: PathBuf) -> Result<Self, PluginSystemError> {
+    pub async fn initialize(plugin_dir: PathBuf, db: Database) -> Result<Self, PluginSystemError> {
         info!(
             "Initializing plugin system with directory: {:?}",
             plugin_dir
@@ -208,7 +209,20 @@ impl PluginSystem {
                 }
             };
 
-            plugins.insert(pool.metadata.uuid, pool);
+            let id = match db.register_plugin(pool.metadata.uuid).await {
+                Ok(plugin_id) => {
+                    info!(
+                        "Loaded plugin '{}' with ID {}",
+                        pool.metadata.name, plugin_id.0
+                    );
+                    plugin_id
+                }
+                Err(e) => {
+                    warn!(error = %e, "Failed to register plugin {:?} in database: {}", entry.file_name(), e);
+                    continue;
+                }
+            };
+            plugins.insert(id, pool);
         }
 
         info!("Loaded {} plugins", plugins.len());
@@ -218,8 +232,8 @@ impl PluginSystem {
         })
     }
 
-    pub fn get_free_plugin(&self, uuid: Uuid) -> Option<PluginHandle<'_>> {
-        self.plugins.get(&uuid).map(|pool| pool.get_free_plugin())
+    pub fn get_free_plugin(&self, id: PluginId) -> Option<PluginHandle<'_>> {
+        self.plugins.get(&id).map(|pool| pool.get_free_plugin())
     }
 
     pub fn cleanup_pool(&self) {
