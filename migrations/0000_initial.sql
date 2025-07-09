@@ -1,17 +1,17 @@
 CREATE TABLE plugins(
     plugin_id INTEGER NOT NULL PRIMARY KEY,
-    uuid TEXT NOT NULL UNIQUE
+    uuid BLOB NOT NULL UNIQUE
 );
 
 CREATE TABLE artists(
 	artist_id INTEGER NOT NULL PRIMARY KEY,
-	mbid TEXT,
+	mbid BLOB,
 	name TEXT NOT NULL
 );
 
 CREATE TABLE albums(
 	album_id INTEGER NOT NULL PRIMARY KEY,
-	mbid TEXT,
+	mbid BLOB,
 	title TEXT NOT NULL,
 	artist_id INTEGER,
 	FOREIGN KEY (artist_id) REFERENCES artists(artist_id)
@@ -27,19 +27,19 @@ CREATE TABLE tracks(
     track_group_id INTEGER NOT NULL,
 
     plugin_id INTEGER NOT NULL,
-    plugin_data TEXT,
+    plugin_data TEXT NOT NULL,
 
     artist_id INTEGER,
     album_artist_id INTEGER,
     album_id INTEGER,
 
     -- general
-    track_title TEXT,
-    music_brainz_work_id TEXT,
-    music_brainz_track_id TEXT,
-    music_brainz_recording_id TEXT,
-    subtitle TEXT,
-    track_title_sort_order TEXT,
+    track_title TEXT NOT NULL,
+    track_subtitle TEXT,
+    musicbrainz_work_id BLOB,
+    musicbrainz_track_id BLOB,
+    musicbrainz_recording_id BLOB,
+    track_title_sort_order BLOB,
 
     comment TEXT,
     description TEXT,
@@ -49,21 +49,22 @@ CREATE TABLE tracks(
 
     -- album
     album_title TEXT,
+    album_artist TEXT,
     set_subtitle TEXT,
-    music_brainz_release_group_id TEXT,
-    music_brainz_release_id TEXT,
-    original_album_title TEXT,
-    album_title_sort_order TEXT,
+    musicbrainz_release_group_id BLOB,
+    musicbrainz_release_id BLOB,
+    original_album_title BLOB,
+    album_title_sort_order BLOB,
 
-    music_brainz_release_artist_id TEXT,
+    musicbrainz_release_artist_id BLOB,
     album_artist_sort_order TEXT,
 
     content_group TEXT,
 
     -- artist
-    -- track_artist TEXT,
+    track_artist TEXT,
     track_artists TEXT,
-    music_brainz_artist_id TEXT,
+    musicbrainz_artist_id TEXT,
     original_artist TEXT,
     track_artist_sort_order TEXT,
 
@@ -136,6 +137,13 @@ CREATE TABLE tracks(
     -- legal
     copyright_message TEXT,
     license TEXT,
+
+    -- podcast
+    podcast_description TEXT,
+    podcast_series_category TEXT,
+    podcast_url TEXT,
+    podcast_global_unique_id TEXT,
+    podcast_keywords TEXT,
 
     -- misc
     popularimeter TEXT,

@@ -1,5 +1,5 @@
 use crate::ui::*;
-use futures::stream::StreamExt;
+use futures_util::stream::StreamExt;
 use std::{
     collections::HashMap,
     sync::atomic::{AtomicUsize, Ordering},
@@ -197,6 +197,8 @@ pub fn ToastNotificationTarget() -> Element {
         position_right: "16",
         width: "300",
         spacing: "8",
+        layer: "-100",
+
         for notification in toast_notifications {
             ToastNotification { notification }
         }

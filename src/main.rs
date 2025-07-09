@@ -1,5 +1,5 @@
 use clap::Parser;
-use hogehoge_db::Database;
+use hogehoge_db::{Database, DbStats};
 use std::path::PathBuf;
 use tokio::task;
 
@@ -50,7 +50,7 @@ fn app() -> Element {
         StatusBar {},
         PlayerBar {},
         rect {
-            height: "calc(100% - 16 - 32)", // 16 for status bar, 48 for player bar
+            height: "calc(100% - 16 - 32)", // status + player bar height
             width: "100%",
             direction: "horizontal",
             SideBar {},
@@ -95,10 +95,11 @@ fn AppWrapper(children: Element) -> Element {
 fn ContextProvider(children: Element) -> Element {
     let args = use_context::<Args>();
 
+    let db_stats = use_signal_sync(DbStats::default);
     use_resource_provider("Database", move || {
         let db_path = args.db_path.clone();
-        async {
-            let db = Database::connect(db_path)
+        async move {
+            let db = Database::connect(db_path, db_stats)
                 .await
                 .expect("Failed to open database");
 

@@ -1,7 +1,11 @@
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
-use hogehoge_db::Database;
-use hogehoge_types::{ScanResult, Track, UniqueTrackIdentifier};
+use freya::prelude::{Signal, SyncStorage};
+use hogehoge_db::{Database, DbStats};
+use hogehoge_types::{ScanResult, UniqueTrackIdentifier};
 use rayon::{ThreadPool, prelude::*};
 use tokio::sync::mpsc;
 use tracing::*;
@@ -16,8 +20,7 @@ pub struct Library {
     db: Database,
 }
 
-// since bulk inserting cannot be done in parallel anyways on a sqlite database, use a separate
-// worker in that case
+// since bulk inserting cannot be done in parallel on a sqlite database, use a separate worker
 #[derive(Debug)]
 pub struct LibraryImportWorker {
     import_rx: mpsc::Receiver<(UniqueTrackIdentifier, ScanResult)>,
@@ -31,7 +34,7 @@ impl Library {
         let scan_threads = rayon::ThreadPoolBuilder::new()
             .num_threads(
                 std::thread::available_parallelism()
-                    .map(|n| usize::max(n.get() - 1, 1))
+                    .map(|n| usize::max(n.get().saturating_sub(2), 1))
                     .unwrap_or(1),
             )
             .build()
@@ -55,9 +58,18 @@ impl Library {
         }
     }
 
+    pub fn stats(&self) -> Signal<DbStats, SyncStorage> {
+        self.db.stats()
+    }
+
     #[instrument(skip_all)]
     pub fn scan(&self, plugin_system: PluginSystem) -> Notification {
+        const PREPARE_SCAN_PROGRESS: f32 = 10.0;
+
         let (notification, notification_handle) = Notification::new_progress("Music Scan");
+        notification_handle.modify_state(|state| {
+            state.message = "Preparing scan...".into();
+        });
 
         info!("Starting music scan...");
         let parent_span = Span::current();
@@ -93,7 +105,7 @@ impl Library {
                     };
 
                     notification_handle.modify_state(|state| {
-                        state.progress += 50.0 / plugin_count as f32;
+                        state.progress += PREPARE_SCAN_PROGRESS / plugin_count as f32;
                     });
 
                     result
@@ -106,11 +118,13 @@ impl Library {
             info!("Found {} tracks to scan", tracks_count);
 
             notification_handle.modify_state(|state| {
-                state.progress = 50.0;
+                state.progress = PREPARE_SCAN_PROGRESS;
                 state.message = "Scanning tracks...".into();
             });
 
             // TODO: prefer scanning tracks that are not already in the library
+
+            let tracks_scanned = AtomicUsize::new(0);
             prepared_scans
                 .into_par_iter()
                 .for_each(|(id, prepared_scan)| {
@@ -123,7 +137,7 @@ impl Library {
                         match plugin.scan(&track) {
                             Ok(result) => {
                                 let identifier = UniqueTrackIdentifier {
-                                    plugin: id,
+                                    plugin_id: id,
                                     plugin_data: track,
                                 };
 
@@ -139,7 +153,14 @@ impl Library {
                         }
 
                         notification_handle.modify_state(|state| {
-                            state.progress += 50.0 / tracks_count as f32;
+                            let track_scanned = tracks_scanned.fetch_add(1, Ordering::Relaxed) + 1;
+
+                            state.progress = PREPARE_SCAN_PROGRESS
+                                + (track_scanned as f32 / tracks_count as f32)
+                                    * (100.0 - PREPARE_SCAN_PROGRESS);
+                            state.message =
+                                format!("Scanning tracks... ({}/{})", track_scanned, tracks_count)
+                                    .into()
                         });
                     });
                 });
@@ -163,19 +184,10 @@ impl LibraryImportWorker {
     }
 
     #[instrument(skip(self))]
-    async fn process_scan(&self, scan: ScanResult, identifier: UniqueTrackIdentifier) {
-        let track = match Track::from_tags(identifier, scan.tags) {
-            Ok(track) => track,
-            Err(e) => {
-                warn!("Failed to create track from scan result: {}", e);
-                return;
-            }
-        };
+    async fn process_scan(&mut self, scan: ScanResult, identifier: UniqueTrackIdentifier) {
+        let title = scan.tags.track_title.clone();
 
-        let title = track.title.clone();
-        let db = self.db.clone();
-
-        match db.find_or_create_track(track).await {
+        match self.db.find_or_create_track(identifier, scan.tags).await {
             Ok(_) => {
                 trace!("Track '{:?}' added to the library", title);
             }

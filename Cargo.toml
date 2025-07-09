@@ -14,7 +14,6 @@ hogehoge-db = { path = "crates/db" }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing = "0.1"
-futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
 futures-util = { version = "0.3" }
 
 serde = { version = "1", features = ["derive"] }
@@ -31,9 +30,11 @@ extism = { git = "https://github.com/Fisch03/extism", default-features = false, 
 extism-convert = { git = "https://github.com/Fisch03/extism", default-features = false, features = ["msgpack"] }
 extism-pdk = { git = "https://github.com/Fisch03/rust-pdk", default-features = false, features = ["msgpack"] }
 
-sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "sqlite", "derive", "migrate", "macros" ] }
-sea-query = { version = "0.32", default-features = false, features = ["derive", "backend-sqlite"] }
-sea-query-binder = { version = "0.7", features = ["sqlx-sqlite"] }
+sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "sqlite-unbundled", "derive", "migrate", "macros", "uuid" ] }
+# sea-query = { version = "0.32", default-features = false, features = ["derive", "backend-sqlite"] }
+# sea-query-binder = { version = "0.7", features = ["sqlx-sqlite"] }
+
+freya = { git = "https://github.com/marc2332/freya.git", rev = "0b3b7e2504b3599eacd0ca28b14a3d4034f69910", features = ["custom-tokio-rt"] }
 
 glob = "0.3"
 
@@ -51,13 +52,11 @@ path = "src/main.rs"
 
 [profile.dev.package."*"]
 opt-level = 3
-
-[profile.release]
 # lto = true
 # codegen-units = 1
 
 [dependencies]
-hogehoge-types.workspace = true
+hogehoge-types = { path = "crates/types", features = ["internal"] }
 hogehoge-db.workspace = true
 extism.workspace = true
 
@@ -65,16 +64,14 @@ tokio.workspace = true
 tokio-stream.workspace = true
 tracing.workspace = true
 tracing-subscriber = "0.3"
-futures.workspace = true
 futures-util.workspace = true
-
 
 clap.workspace = true
 nu-ansi-term.workspace = true
 
 serde.workspace = true
 
-freya = { version = "0.3", features = ["custom-tokio-rt"] }
+freya.workspace = true
 
 rayon = "1"
 

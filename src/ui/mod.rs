@@ -23,37 +23,57 @@ pub static DEFAULT_THEME: LazyLock<Theme> = LazyLock::new(|| {
     Theme::from_partial(partial).expect("Expected default theme to contain all theme fields")
 });
 
-#[derive(Clone, Debug)]
-struct ResourceName<T> {
+#[derive(Debug, Clone)]
+pub struct ContextResource<T: 'static> {
     name: &'static str,
-    _marker: std::marker::PhantomData<T>,
+    value: Signal<Option<T>>,
+    task: Task,
+    state: Signal<bool>,
+}
+
+impl<T> ContextResource<T> {
+    pub fn suspend(&self) -> Result<MappedSignal<T>, RenderError> {
+        if self.state.cloned() {
+            Ok(self.value.map(|v| v.as_ref().unwrap()))
+        } else {
+            Err(RenderError::Suspended(SuspendedFuture::new(self.task)))
+        }
+    }
 }
 
 pub fn use_resource_provider<T, F>(
-    resource_name: &'static str,
-    f: impl FnMut() -> F + 'static,
-) -> Resource<T>
+    name: &'static str,
+    mut f: impl FnMut() -> F + 'static,
+) -> ContextResource<T>
 where
     T: Clone + 'static,
     F: Future<Output = T> + 'static,
 {
-    let resource = use_resource(f);
+    let mut value = use_signal(|| None);
+    let mut state = use_signal(|| false);
 
-    use_context_provider(|| ResourceName::<T> {
-        name: resource_name,
-        _marker: std::marker::PhantomData,
+    let task = spawn(async move {
+        let res = f().await;
+
+        state.set(true);
+        value.set(Some(res));
     });
-    use_context_provider(|| resource)
+
+    use_context_provider(|| ContextResource {
+        name,
+        value,
+        state,
+        task,
+    })
 }
 
 pub fn use_context_resource<T: Clone>() -> Result<MappedSignal<T>, RenderError> {
-    let resource = use_context::<Resource<T>>();
-    let resource_name = use_context::<ResourceName<T>>().name;
+    let resource = use_context::<ContextResource<T>>();
 
     resource.suspend().with_loading_placeholder(|| {
         rsx!(label {
             font_size: "16",
-            "Waiting for {resource_name} to initialize..."
+            "Waiting for {resource.name} to initialize..."
         })
     })
 }
@@ -68,6 +88,53 @@ pub fn Icon(data: Vec<u8>, rotate: Option<String>) -> Element {
         height: "24",
         rotate,
     })
+}
+
+#[component]
+pub fn Button(
+    onclick: Option<Callback<()>>,
+    #[props(default = "0 0 4 0 rgb(0, 0, 0, 100)".to_string())] shadow: String,
+    children: Element,
+) -> Element {
+    let theme = use_context::<Theme>();
+
+    enum State {
+        Idle,
+        Hovered,
+        Pressed,
+    }
+
+    let mut state = use_signal(|| State::Idle);
+
+    rsx!(
+        rect {
+            shadow,
+            corner_radius: "6",
+            padding: "6",
+            cross_align: "center",
+
+            onmouseenter: move |_| state.set(State::Hovered),
+            onmouseleave: move |_| state.set(State::Idle),
+            onmousedown: move |_| state.set(State::Pressed),
+            onmouseup: move |_| state.set(State::Hovered),
+
+            onclick: move |e| {
+                if let Some(callback) = &onclick {
+                    callback.call(());
+                }
+                e.stop_propagation();
+            },
+
+            background: match *state.read() {
+                State::Idle => theme.colors.button_idle,
+                State::Hovered => theme.colors.button_hover,
+                State::Pressed => theme.colors.button_press,
+            },
+
+            {children}
+        },
+
+    )
 }
 
 #[component]

@@ -52,7 +52,7 @@ fn main() -> Result<()> {
             let file = file?;
             let path = file.path();
             if path.is_file() {
-                let relative_path = path.strip_prefix(&entry.path()).unwrap();
+                let relative_path = path.strip_prefix(entry.path()).unwrap();
                 archive.append_path_with_name(&path, relative_path)?;
             }
         }

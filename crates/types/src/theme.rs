@@ -1,10 +1,11 @@
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+#[cfg(feature = "internal")]
 use std::{
     collections::HashMap,
     io::{Read, Seek},
 };
-
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 macro_rules! make_theme {
     (colors: [$($color:ident,)*], icons: [$($icon:ident,)*]) => {
@@ -97,6 +98,8 @@ macro_rules! make_theme {
             }
         }
 
+
+        #[cfg(feature = "internal")]
         impl PartialThemeManifestIcons {
             fn build_required_icons<T: Default>(&self) -> HashMap<String, T> {
                 let mut icons = HashMap::new();
@@ -110,6 +113,7 @@ macro_rules! make_theme {
             }
         }
 
+        #[cfg(feature = "internal")]
         impl PartialTheme {
             fn build(manifest: PartialThemeManifest, mut required_icons: HashMap<String, Option<Vec<u8>>>) -> Result<Self, ThemeError> {
                 let icons = PartialThemeIcons {
@@ -157,6 +161,10 @@ make_theme! {
         success,
         warning,
         error,
+
+        table_row_alt,
+        table_row_hover,
+        table_row_press,
     ],
 
     icons: [
@@ -188,8 +196,9 @@ pub enum ThemeError {
     MissingIcon(String),
 }
 
+#[cfg(feature = "internal")]
 impl PartialTheme {
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(reader)))]
+    #[tracing::instrument(skip(reader))]
     pub fn load<R: Read + Seek>(reader: R) -> Result<Self, ThemeError> {
         let mut archive = tar::Archive::new(reader);
 

@@ -44,8 +44,12 @@ fn scan_recurse<P: AsRef<Path>>(tracks: &mut Vec<PluginTrackIdentifier>, path: P
             _ => return Ok(()), // Unsupported file type, skip
         }
 
-        let path = path.to_string_lossy().to_string();
-        let ident = PluginTrackIdentifier(path.clone());
+        let path = path
+            .strip_prefix("/music")
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        let ident = PluginTrackIdentifier(path);
         tracks.push(ident);
     } else if path.is_dir() {
         for entry in fs::read_dir(path)? {
@@ -67,12 +71,12 @@ enum ScanError {
 pub fn scan(ident: PluginTrackIdentifier) -> FnResult<ScanResult> {
     use lofty::file::TaggedFileExt;
 
-    let path = Path::new(&ident.0);
+    let path = Path::new("/music").join(ident.0);
 
     let tagged_file = lofty::read_from_path(path)?;
     let tag = tagged_file.primary_tag().ok_or(ScanError::NoTags)?;
 
-    let tags = tags::map_lofty_to_internal(tag);
+    let tags = tags::map_lofty_to_internal(tag)?;
 
     Ok(ScanResult { tags })
 }
