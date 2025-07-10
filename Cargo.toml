@@ -30,7 +30,10 @@ extism = { git = "https://github.com/Fisch03/extism", default-features = false, 
 extism-convert = { git = "https://github.com/Fisch03/extism", default-features = false, features = ["msgpack"] }
 extism-pdk = { git = "https://github.com/Fisch03/rust-pdk", default-features = false, features = ["msgpack"] }
 
-sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "sqlite-unbundled", "derive", "migrate", "macros", "uuid" ] }
+rodio = { version = "0.20", default-features = false }
+symphonia = { version = "0.5", features = ["all"] }
+
+sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "sqlite", "derive", "migrate", "macros", "uuid" ] }
 # sea-query = { version = "0.32", default-features = false, features = ["derive", "backend-sqlite"] }
 # sea-query-binder = { version = "0.7", features = ["sqlx-sqlite"] }
 
@@ -76,3 +79,4 @@ freya.workspace = true
 rayon = "1"
 
 thiserror.workspace = true
+

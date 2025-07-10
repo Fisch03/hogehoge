@@ -6,3 +6,6 @@ pub use plugin::*;
 
 pub mod theme;
 pub use theme::*;
+
+pub mod audio;
+pub use audio::*;

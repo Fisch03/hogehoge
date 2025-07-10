@@ -24,6 +24,8 @@ pub enum PluginSystemError {
 #[derive(Debug)]
 pub struct PluginPool {
     pub metadata: PluginMetadata,
+    pub capabilities: PluginCapabilities,
+
     plugin_path: PathBuf,
     plugins: Mutex<VecDeque<Plugin>>,
     wait_condvar: Condvar,
@@ -36,6 +38,22 @@ pub struct PluginHandle<'a> {
     pool: &'a PluginPool,
     plugin: Option<Plugin>,
 }
+
+#[derive(Debug, Clone)]
+pub struct PluginCapabilities {
+    pub scan_tracks: bool,
+    pub playback: bool,
+}
+
+impl PluginCapabilities {
+    pub fn from_plugin(plugin: &Plugin) -> Self {
+        PluginCapabilities {
+            scan_tracks: plugin.has_fn("prepare_scan") && plugin.has_fn("scan"),
+            playback: plugin.has_fn("play") || plugin.has_fn("playback"),
+        }
+    }
+}
+
 
 #[derive(Debug, Error)]
 pub enum PluginError {
@@ -51,6 +69,10 @@ pub enum PluginError {
 impl Plugin {
     pub fn get_metadata(&mut self) -> Result<PluginMetadata, PluginError> {
         self.call("get_metadata", ())
+    }
+
+    pub fn has_fn(&self, function: &str) -> bool {
+        self.0.function_exists(function)
     }
 
     pub fn prepare_scan(&mut self) -> Result<PreparedScan, PluginError> {
@@ -94,6 +116,7 @@ impl Plugin {
     }
 }
 
+
 impl PluginPool {
     pub fn try_new(path: &Path) -> Result<Self, PluginError> {
         let mut plugin = Plugin::try_load(path)?;
@@ -101,6 +124,7 @@ impl PluginPool {
 
         Ok(PluginPool {
             metadata,
+            capabilities: PluginCapabilities::from_plugin(&plugin),
             plugin_path: path.to_path_buf(),
             plugins: Mutex::new(VecDeque::from([plugin])),
             wait_condvar: Condvar::new(),

@@ -14,6 +14,8 @@ mod player;
 pub use player::PlayerBar;
 mod main_content;
 pub use main_content::MainContent;
+mod library;
+pub use library::{LibraryView, LibraryStats};
 
 use std::sync::LazyLock;
 pub static DEFAULT_THEME: LazyLock<Theme> = LazyLock::new(|| {
