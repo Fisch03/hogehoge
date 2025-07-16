@@ -6,6 +6,8 @@ use tokio::task;
 mod library;
 use library::Library;
 
+mod audio;
+
 mod plugin;
 use plugin::PluginSystem;
 

@@ -1,7 +1,8 @@
-use crate::Tags;
+use crate::{AudioFile, PlaybackId, Tags};
 use extism_convert::{FromBytes, Msgpack, ToBytes};
 use serde::{Deserialize, Serialize};
 pub use uuid::{Uuid, uuid};
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToBytes, FromBytes, Serialize, Deserialize)]
 #[cfg_attr(feature = "internal", derive(sqlx::Type))]
@@ -51,4 +52,17 @@ pub struct PreparedScan {
 #[encoding(Msgpack)]
 pub struct ScanResult {
     pub tags: Tags,
+}
+
+#[derive(Clone, Debug, ToBytes, FromBytes, Serialize, Deserialize)]
+#[encoding(Msgpack)]
+pub struct InitDecodingArgs {
+    pub playback_id: PlaybackId,
+    pub file: AudioFile,
+}
+
+#[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
+#[encoding(Msgpack)]
+pub struct InitDecodingResult {
+    pub duration: Option<Duration>,
 }

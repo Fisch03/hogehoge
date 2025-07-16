@@ -1,6 +1,6 @@
 use extism::{Manifest, Plugin as LoadedPlugin, PluginBuilder};
 use hogehoge_db::Database;
-use hogehoge_types::{PluginId, PluginMetadata, PluginTrackIdentifier, PreparedScan, ScanResult};
+use hogehoge_types::{plugin::*, audio::{PlaybackId, AudioFile, AudioBlock}};
 use std::{
     collections::{HashMap, VecDeque},
     ffi::OsStr,
@@ -34,6 +34,7 @@ pub struct PluginPool {
 #[derive(Debug)]
 pub struct Plugin(LoadedPlugin);
 
+#[derive(Debug)]
 pub struct PluginHandle<'a> {
     pool: &'a PluginPool,
     plugin: Option<Plugin>,
@@ -42,14 +43,14 @@ pub struct PluginHandle<'a> {
 #[derive(Debug, Clone)]
 pub struct PluginCapabilities {
     pub scan_tracks: bool,
-    pub playback: bool,
+    pub decode: bool,
 }
 
 impl PluginCapabilities {
     pub fn from_plugin(plugin: &Plugin) -> Self {
         PluginCapabilities {
             scan_tracks: plugin.has_fn("prepare_scan") && plugin.has_fn("scan"),
-            playback: plugin.has_fn("play") || plugin.has_fn("playback"),
+            decode: plugin.has_fn("init_decoding") && plugin.has_fn("decode_block") && plugin.has_fn("finish_decoding"),
         }
     }
 }
@@ -83,10 +84,26 @@ impl Plugin {
         self.call("scan", ident)
     }
 
+    pub fn init_decoding(
+        &mut self,
+        playback_id: PlaybackId,
+        file: AudioFile,
+    ) -> Result<InitDecodingResult, PluginError> {
+        self.call("init_decoding", InitDecodingArgs { playback_id, file })
+    }
+
+    pub fn decode_block(&mut self, playback_id: PlaybackId) -> Result<Option<AudioBlock>, PluginError> {
+        self.call("decode_block", playback_id)
+    }
+
+    pub fn finish_decoding(&mut self, playback_id: PlaybackId) -> Result<(), PluginError> {
+        self.call("finish_decoding", playback_id)
+    }
+
     #[instrument]
     fn try_load(path: &Path) -> Result<Self, PluginError> {
-        let manifest = Manifest::new([path.to_path_buf()])
-            .with_allowed_path("/home/sakanaa/nas/Audio/Music/".to_string(), "music");
+        let manifest = Manifest::new([path.to_path_buf()]);
+            //.with_allowed_path("/home/sakanaa/nas/Audio/Music/".to_string(), "music");
 
         let plugin = PluginBuilder::new(manifest)
             .with_wasi(true)
@@ -172,6 +189,10 @@ impl<'a> PluginHandle<'a> {
             pool,
             plugin: Some(plugin),
         }
+    }
+
+    pub fn capabilities(&self) -> &PluginCapabilities {
+        &self.pool.capabilities
     }
 }
 

@@ -26,11 +26,11 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 nu-ansi-term = "0.50"
 
-extism = { git = "https://github.com/Fisch03/extism", default-features = false, features = [ "register-filesystem", "msgpack" ] }
+extism = { git = "https://github.com/Fisch03/extism", default-features = false, features = [ "register-filesystem", "msgpack"] }
 extism-convert = { git = "https://github.com/Fisch03/extism", default-features = false, features = ["msgpack"] }
 extism-pdk = { git = "https://github.com/Fisch03/rust-pdk", default-features = false, features = ["msgpack"] }
 
-rodio = { version = "0.20", default-features = false }
+rodio = { version = "0.21", default-features = false }
 symphonia = { version = "0.5", features = ["all"] }
 
 sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "sqlite", "derive", "migrate", "macros", "uuid" ] }
@@ -68,6 +68,8 @@ tokio-stream.workspace = true
 tracing.workspace = true
 tracing-subscriber = "0.3"
 futures-util.workspace = true
+
+rodio.workspace = true
 
 clap.workspace = true
 nu-ansi-term.workspace = true

@@ -20,4 +20,4 @@ concat-with = "0.2.9"
 
 [features]
 default = []
-internal = ["dep:tracing", "dep:tar", "dep:sqlx"]
+internal = ["dep:tracing", "dep:tar", "dep:sqlx", "uuid/v4"]

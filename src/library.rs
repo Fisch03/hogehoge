@@ -83,7 +83,7 @@ impl Library {
             let prepared_scans = plugin_system
                 .plugins
                 .par_iter()
-                .filter(|_, pool)| pool.capabilities.scan_tracks)
+                .filter(|(_, pool)| pool.capabilities.scan_tracks)
                 .filter_map(|(id, pool)| {
                     let _span = info_span!(parent: &parent_span, "prepare_scan").entered();
                     debug!("Preparing scan for plugin '{}'", pool.metadata.name);
