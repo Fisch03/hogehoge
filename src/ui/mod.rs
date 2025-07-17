@@ -15,7 +15,7 @@ pub use player::PlayerBar;
 mod main_content;
 pub use main_content::MainContent;
 mod library;
-pub use library::{LibraryView, LibraryStats};
+pub use library::{LibraryStats, LibraryView};
 
 use std::sync::LazyLock;
 pub static DEFAULT_THEME: LazyLock<Theme> = LazyLock::new(|| {
@@ -45,7 +45,7 @@ impl<T> ContextResource<T> {
 
 pub fn use_resource_provider<T, F>(
     name: &'static str,
-    mut f: impl FnMut() -> F + 'static,
+    f: impl FnOnce() -> F + 'static,
 ) -> ContextResource<T>
 where
     T: Clone + 'static,
@@ -54,18 +54,20 @@ where
     let mut value = use_signal(|| None);
     let mut state = use_signal(|| false);
 
-    let task = spawn(async move {
-        let res = f().await;
+    use_context_provider(|| {
+        let task = spawn(async move {
+            let res = f().await;
 
-        state.set(true);
-        value.set(Some(res));
-    });
+            state.set(true);
+            value.set(Some(res));
+        });
 
-    use_context_provider(|| ContextResource {
-        name,
-        value,
-        state,
-        task,
+        ContextResource {
+            name,
+            value,
+            state,
+            task,
+        }
     })
 }
 

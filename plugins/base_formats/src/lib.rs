@@ -1,12 +1,24 @@
 use extism_pdk::{FnResult, plugin_fn};
-use hogehoge_types::{AudioBlock, PlaybackId, InitDecodingArgs, PluginMetadata, uuid, Sample, InitDecodingResult};
-use std::{collections::HashMap, io::Cursor, sync::{Mutex, LazyLock}};
+use hogehoge_types::{
+    AudioBlock, InitDecodingArgs, InitDecodingResult, PlaybackId, PluginMetadata, Sample, uuid,
+};
+use std::{
+    collections::HashMap,
+    io::Cursor,
+    sync::{LazyLock, Mutex},
+};
 use symphonia::core::{
-    audio::{AudioBuffer,  AudioBufferRef, Signal}, codecs::{Decoder, DecoderOptions}, conv::IntoSample, errors::Error as SymphoniaError, formats::{FormatOptions, FormatReader}, io::MediaSourceStream, meta::MetadataOptions, probe::Hint,
-    sample::Sample as SymphoniaSample
+    audio::{AudioBuffer, AudioBufferRef, Signal},
+    codecs::{Decoder, DecoderOptions},
+    conv::IntoSample,
+    errors::Error as SymphoniaError,
+    formats::{FormatOptions, FormatReader},
+    io::MediaSourceStream,
+    meta::MetadataOptions,
+    probe::Hint,
+    sample::Sample as SymphoniaSample,
 };
 use thiserror::Error;
-
 
 #[plugin_fn]
 pub fn get_metadata() -> FnResult<PluginMetadata> {
@@ -37,10 +49,17 @@ struct DecoderState {
     track_id: u32,
 }
 
-static DECODER_STATES: LazyLock<Mutex<HashMap<PlaybackId, DecoderState>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static DECODER_STATES: LazyLock<Mutex<HashMap<PlaybackId, DecoderState>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[plugin_fn]
-pub fn init_decoding(InitDecodingArgs { playback_id, file }: InitDecodingArgs) -> FnResult<InitDecodingResult> {
+pub fn init_decoding(
+    InitDecodingArgs {
+        playback_id,
+        file,
+        gapless,
+    }: InitDecodingArgs,
+) -> FnResult<InitDecodingResult> {
     let mut state = DECODER_STATES.lock().unwrap();
 
     let mss = MediaSourceStream::new(Box::new(Cursor::new(file.data)), Default::default());
@@ -52,7 +71,7 @@ pub fn init_decoding(InitDecodingArgs { playback_id, file }: InitDecodingArgs) -
 
     let meta_options: MetadataOptions = Default::default();
     let format_options = FormatOptions {
-        enable_gapless: true, // TODO: make configurable
+        enable_gapless: gapless,
         ..Default::default()
     };
     let probed =
@@ -60,16 +79,20 @@ pub fn init_decoding(InitDecodingArgs { playback_id, file }: InitDecodingArgs) -
 
     let format = probed.format;
 
-    let track = format.default_track().ok_or(DecodeError::InvalidAudioTrack)?;
+    let track = format
+        .default_track()
+        .ok_or(DecodeError::InvalidAudioTrack)?;
 
     let decoder_options: DecoderOptions = Default::default();
     let decoder = symphonia::default::get_codecs().make(&track.codec_params, &decoder_options)?;
 
-    let duration = track.codec_params.time_base.zip(track.codec_params.n_frames)
+    let duration = track
+        .codec_params
+        .time_base
+        .zip(track.codec_params.n_frames)
         .map(|(time_base, n_frames)| time_base.calc_time(n_frames).into());
 
     let track_id = track.id;
-
 
     state.insert(
         playback_id,
@@ -80,9 +103,7 @@ pub fn init_decoding(InitDecodingArgs { playback_id, file }: InitDecodingArgs) -
         },
     );
 
-    Ok(InitDecodingResult {
-        duration
-    })
+    Ok(InitDecodingResult { duration })
 }
 
 #[plugin_fn]
@@ -93,39 +114,39 @@ pub fn decode_block(playback_id: PlaybackId) -> FnResult<Option<AudioBlock>> {
         .ok_or(DecodeError::EncodingNotInitialized)?;
 
     loop {
-    let packet = state.format.next_packet()?;
+        let packet = state.format.next_packet()?;
 
-    while !state.format.metadata().is_latest() {
-        state.format.metadata().pop();
-    }
-
-    if packet.track_id() != state.track_id {
-        continue;
-    }
-
-    match state.decoder.decode(&packet) {
-        Ok(decoded) => {
-            if decoded.frames() == 0 {
-                continue;
-            }
-
-            let sample_rate = decoded.spec().rate;
-            let channel_count = decoded.spec().channels.count() as u16;
-            let samples = copy_decoded_samples(decoded);
-
-            return Ok(Some(AudioBlock {
-                samples,
-                sample_rate,
-                channel_count,
-            }));
+        while !state.format.metadata().is_latest() {
+            state.format.metadata().pop();
         }
 
-        Err(SymphoniaError::IoError(_)) => continue,
-        Err(SymphoniaError::DecodeError(_)) => continue,
+        if packet.track_id() != state.track_id {
+            continue;
+        }
 
-        Err(_) => return Ok(None),
+        match state.decoder.decode(&packet) {
+            Ok(decoded) => {
+                if decoded.frames() == 0 {
+                    continue;
+                }
+
+                let sample_rate = decoded.spec().rate;
+                let channel_count = decoded.spec().channels.count() as u16;
+                let samples = copy_decoded_samples(decoded);
+
+                return Ok(Some(AudioBlock {
+                    samples,
+                    sample_rate,
+                    channel_count,
+                }));
+            }
+
+            Err(SymphoniaError::IoError(_)) => continue,
+            Err(SymphoniaError::DecodeError(_)) => continue,
+
+            Err(_) => return Ok(None),
+        }
     }
-}
 }
 
 #[plugin_fn]
@@ -135,7 +156,7 @@ pub fn finish_decoding(playback_id: PlaybackId) -> FnResult<()> {
     Ok(())
 }
 
-fn copy_decoded_samples(src: AudioBufferRef) ->  Vec<Sample> {
+fn copy_decoded_samples(src: AudioBufferRef) -> Vec<Sample> {
     match src {
         AudioBufferRef::U8(buf) => copy_decoded_samples_inner(&buf),
         AudioBufferRef::U16(buf) => copy_decoded_samples_inner(&buf),
@@ -150,7 +171,10 @@ fn copy_decoded_samples(src: AudioBufferRef) ->  Vec<Sample> {
     }
 }
 
-fn copy_decoded_samples_inner<F>(src: &AudioBuffer<F>) -> Vec<Sample> where F: SymphoniaSample + IntoSample<Sample>{
+fn copy_decoded_samples_inner<F>(src: &AudioBuffer<F>) -> Vec<Sample>
+where
+    F: SymphoniaSample + IntoSample<Sample>,
+{
     let n_channels = src.spec().channels.count();
     let n_samples = src.frames() * n_channels;
 

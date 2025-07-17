@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use extism_pdk::{FnResult, plugin_fn};
 use hogehoge_types::{
-    FsMount, PluginMetadata, PluginTrackIdentifier, PreparedScan, ScanResult, uuid,
+    AudioFile, FsMount, PluginMetadata, PluginTrackIdentifier, PreparedScan, ScanResult, uuid,
 };
 use std::fs;
 
@@ -79,4 +79,22 @@ pub fn scan(ident: PluginTrackIdentifier) -> FnResult<ScanResult> {
     let tags = tags::map_lofty_to_internal(tag)?;
 
     Ok(ScanResult { tags })
+}
+
+#[derive(Debug, Error)]
+enum GetAudioFileError {
+    #[error("Failed to read file: {0}")]
+    ReadError(#[from] std::io::Error),
+}
+
+#[plugin_fn]
+pub fn get_audio_file(ident: PluginTrackIdentifier) -> FnResult<AudioFile> {
+    let path = Path::new("/music").join(ident.0);
+
+    let data = fs::read(&path).map_err(GetAudioFileError::ReadError)?;
+
+    let extension = path.extension().and_then(|ext| ext.to_str());
+    let format_hint = extension.map(|ext| ext.to_string());
+
+    Ok(AudioFile { data, format_hint })
 }

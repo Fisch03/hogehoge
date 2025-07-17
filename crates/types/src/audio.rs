@@ -1,4 +1,3 @@
-
 use extism_convert::{FromBytes, Msgpack, ToBytes};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -14,9 +13,17 @@ impl PlaybackId {
     }
 }
 
+#[cfg(feature = "internal")]
+impl Default for PlaybackId {
+    fn default() -> Self {
+        PlaybackId::new()
+    }
+}
+
 #[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]
 #[encoding(Msgpack)]
 pub struct AudioFile {
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub format_hint: Option<String>,
 }

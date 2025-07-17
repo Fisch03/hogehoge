@@ -4,8 +4,8 @@ use futures_util::TryStreamExt;
 use hogehoge_db::Database;
 use hogehoge_types::{TagKind, Track, TrackId};
 
+use crate::Library;
 use crate::ui::*;
-use crate::{Library, PluginSystem};
 
 #[component]
 pub fn LibraryStats() -> Element {
@@ -26,9 +26,8 @@ pub fn LibraryView() -> Element {
 
     let library = use_context_resource::<Library>()?;
     let db = use_context_resource::<Database>()?;
-    let plugin_system = use_context_resource::<PluginSystem>()?;
     let notifications = use_context::<NotificationManager>();
-    use_hook(|| notifications.add(library.read().scan(plugin_system.read().clone())));
+    // use_hook(|| notifications.add(library.read().scan()));
 
     let scroll_controller = use_scroll_controller(ScrollConfig::default);
 
@@ -208,8 +207,7 @@ pub fn LibraryView() -> Element {
 #[component]
 pub fn LibraryItem(index: usize, track: ReadOnlySignal<Track>) -> Element {
     let theme = use_context::<Theme>();
-
-    let track = track.read();
+    let library = use_context_resource::<Library>()?;
 
     const CELLS: &[TagKind] = &[
         TagKind::TrackTitle,
@@ -219,9 +217,10 @@ pub fn LibraryItem(index: usize, track: ReadOnlySignal<Track>) -> Element {
         TagKind::RecordingDate,
     ];
 
+    let track_read = track.read();
     let cells = CELLS
         .iter()
-        .map(|kind| track.tags.get(*kind))
+        .map(|kind| track_read.tags.get(*kind))
         .collect::<Vec<_>>();
 
     enum State {
@@ -241,7 +240,13 @@ pub fn LibraryItem(index: usize, track: ReadOnlySignal<Track>) -> Element {
 
         onmouseenter: move |_| state.set(State::Hovered),
         onmouseleave: move |_| state.set(State::Idle),
-        onmousedown: move |_| state.set(State::Pressed),
+        onmousedown: move |_| {
+            library.read().play(
+                track.read().identifier.clone()
+            );
+
+            state.set(State::Pressed);
+        },
         onmouseup: move |_| state.set(State::Hovered),
 
         background: match *state.read() {

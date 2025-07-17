@@ -1,6 +1,9 @@
 use extism::{Manifest, Plugin as LoadedPlugin, PluginBuilder};
 use hogehoge_db::Database;
-use hogehoge_types::{plugin::*, audio::{PlaybackId, AudioFile, AudioBlock}};
+use hogehoge_types::{
+    audio::{AudioBlock, AudioFile, PlaybackId},
+    plugin::*,
+};
 use std::{
     collections::{HashMap, VecDeque},
     ffi::OsStr,
@@ -12,7 +15,7 @@ use tracing::*;
 
 #[derive(Debug, Clone)]
 pub struct PluginSystem {
-    pub plugins: Arc<HashMap<PluginId, PluginPool>>,
+    pub plugins: Arc<HashMap<PluginId, Arc<PluginPool>>>,
 }
 
 #[derive(Debug, Error)]
@@ -35,26 +38,29 @@ pub struct PluginPool {
 pub struct Plugin(LoadedPlugin);
 
 #[derive(Debug)]
-pub struct PluginHandle<'a> {
-    pool: &'a PluginPool,
+pub struct PluginHandle {
+    pool: Arc<PluginPool>,
     plugin: Option<Plugin>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PluginCapabilities {
-    pub scan_tracks: bool,
+    pub provide_tracks: bool,
     pub decode: bool,
 }
 
 impl PluginCapabilities {
     pub fn from_plugin(plugin: &Plugin) -> Self {
         PluginCapabilities {
-            scan_tracks: plugin.has_fn("prepare_scan") && plugin.has_fn("scan"),
-            decode: plugin.has_fn("init_decoding") && plugin.has_fn("decode_block") && plugin.has_fn("finish_decoding"),
+            provide_tracks: plugin.has_fn("prepare_scan")
+                && plugin.has_fn("scan")
+                && plugin.has_fn("get_audio_file"),
+            decode: plugin.has_fn("init_decoding")
+                && plugin.has_fn("decode_block")
+                && plugin.has_fn("finish_decoding"),
         }
     }
 }
-
 
 #[derive(Debug, Error)]
 pub enum PluginError {
@@ -68,12 +74,12 @@ pub enum PluginError {
 }
 
 impl Plugin {
-    pub fn get_metadata(&mut self) -> Result<PluginMetadata, PluginError> {
-        self.call("get_metadata", ())
-    }
-
     pub fn has_fn(&self, function: &str) -> bool {
         self.0.function_exists(function)
+    }
+
+    pub fn get_metadata(&mut self) -> Result<PluginMetadata, PluginError> {
+        self.call("get_metadata", ())
     }
 
     pub fn prepare_scan(&mut self) -> Result<PreparedScan, PluginError> {
@@ -84,15 +90,33 @@ impl Plugin {
         self.call("scan", ident)
     }
 
+    pub fn get_audio_file(
+        &mut self,
+        ident: &PluginTrackIdentifier,
+    ) -> Result<AudioFile, PluginError> {
+        self.call("get_audio_file", ident)
+    }
+
     pub fn init_decoding(
         &mut self,
         playback_id: PlaybackId,
         file: AudioFile,
+        gapless: bool,
     ) -> Result<InitDecodingResult, PluginError> {
-        self.call("init_decoding", InitDecodingArgs { playback_id, file })
+        self.call(
+            "init_decoding",
+            InitDecodingArgs {
+                playback_id,
+                file,
+                gapless,
+            },
+        )
     }
 
-    pub fn decode_block(&mut self, playback_id: PlaybackId) -> Result<Option<AudioBlock>, PluginError> {
+    pub fn decode_block(
+        &mut self,
+        playback_id: PlaybackId,
+    ) -> Result<Option<AudioBlock>, PluginError> {
         self.call("decode_block", playback_id)
     }
 
@@ -102,8 +126,8 @@ impl Plugin {
 
     #[instrument]
     fn try_load(path: &Path) -> Result<Self, PluginError> {
-        let manifest = Manifest::new([path.to_path_buf()]);
-            //.with_allowed_path("/home/sakanaa/nas/Audio/Music/".to_string(), "music");
+        let manifest = Manifest::new([path.to_path_buf()])
+            .with_allowed_path("/home/sakanaa/nas/Audio/Music/".to_string(), "music");
 
         let plugin = PluginBuilder::new(manifest)
             .with_wasi(true)
@@ -133,7 +157,6 @@ impl Plugin {
     }
 }
 
-
 impl PluginPool {
     pub fn try_new(path: &Path) -> Result<Self, PluginError> {
         let mut plugin = Plugin::try_load(path)?;
@@ -148,10 +171,10 @@ impl PluginPool {
         })
     }
 
-    pub fn get_free_plugin(&self) -> PluginHandle<'_> {
+    pub fn get_free_plugin(self: &Arc<Self>) -> PluginHandle {
         let mut plugins = self.plugins.lock().unwrap();
         if let Some(plugin) = plugins.pop_front() {
-            PluginHandle::new(self, plugin)
+            PluginHandle::new(self.clone(), plugin)
         } else {
             if self.metadata.allow_concurrency {
                 info!(
@@ -160,7 +183,7 @@ impl PluginPool {
                 );
                 match Plugin::try_load(&self.plugin_path) {
                     Ok(plugin) => {
-                        return PluginHandle::new(self, plugin);
+                        return PluginHandle::new(self.clone(), plugin);
                     }
 
                     Err(e) => {
@@ -176,15 +199,15 @@ impl PluginPool {
             loop {
                 plugins = self.wait_condvar.wait(plugins).unwrap();
                 if let Some(plugin) = plugins.pop_front() {
-                    return PluginHandle::new(self, plugin);
+                    return PluginHandle::new(self.clone(), plugin);
                 }
             }
         }
     }
 }
 
-impl<'a> PluginHandle<'a> {
-    pub fn new(pool: &'a PluginPool, plugin: Plugin) -> PluginHandle<'a> {
+impl PluginHandle {
+    pub fn new(pool: Arc<PluginPool>, plugin: Plugin) -> PluginHandle {
         PluginHandle {
             pool,
             plugin: Some(plugin),
@@ -196,7 +219,7 @@ impl<'a> PluginHandle<'a> {
     }
 }
 
-impl std::ops::Deref for PluginHandle<'_> {
+impl std::ops::Deref for PluginHandle {
     type Target = Plugin;
     fn deref(&self) -> &Self::Target {
         self.plugin
@@ -205,7 +228,7 @@ impl std::ops::Deref for PluginHandle<'_> {
     }
 }
 
-impl std::ops::DerefMut for PluginHandle<'_> {
+impl std::ops::DerefMut for PluginHandle {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.plugin
             .as_mut()
@@ -213,7 +236,7 @@ impl std::ops::DerefMut for PluginHandle<'_> {
     }
 }
 
-impl Drop for PluginHandle<'_> {
+impl Drop for PluginHandle {
     fn drop(&mut self) {
         let mut plugins = self.pool.plugins.lock().unwrap();
         if let Some(plugin) = self.plugin.take() {
@@ -267,7 +290,7 @@ impl PluginSystem {
                     continue;
                 }
             };
-            plugins.insert(id, pool);
+            plugins.insert(id, Arc::new(pool));
         }
 
         info!("Loaded {} plugins", plugins.len());
@@ -277,7 +300,7 @@ impl PluginSystem {
         })
     }
 
-    pub fn get_free_plugin(&self, id: PluginId) -> Option<PluginHandle<'_>> {
+    pub fn get_free_plugin(&self, id: PluginId) -> Option<PluginHandle> {
         self.plugins.get(&id).map(|pool| pool.get_free_plugin())
     }
 

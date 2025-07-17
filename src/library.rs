@@ -10,25 +10,30 @@ use rayon::{ThreadPool, prelude::*};
 use tokio::sync::mpsc;
 use tracing::*;
 
+use crate::audio::AudioPlayer;
 use crate::plugin::PluginSystem;
 use crate::ui::notifications::*;
 
 #[derive(Debug, Clone)]
 pub struct Library {
-    scan_threads: Arc<ThreadPool>,
+    thread_pool: Arc<ThreadPool>,
+    plugin_system: PluginSystem,
     import_queue: mpsc::Sender<(UniqueTrackIdentifier, ScanResult)>,
     db: Database,
+    player: Arc<AudioPlayer>,
 }
 
 // since bulk inserting cannot be done in parallel on a sqlite database, use a separate worker
 #[derive(Debug)]
-pub struct LibraryImportWorker {
+struct LibraryImportWorker {
     import_rx: mpsc::Receiver<(UniqueTrackIdentifier, ScanResult)>,
     db: Database,
 }
 
 impl Library {
-    pub async fn new(db: Database) -> Self {
+    pub async fn new(db: Database, plugin_system: PluginSystem) -> Self {
+        let player = AudioPlayer::new(plugin_system.clone());
+
         // we cant use the global rayon thread pool because that one is also used by freya for
         // rendering, so hogging it during scans would cause the UI to freeze
         let scan_threads = rayon::ThreadPoolBuilder::new()
@@ -53,8 +58,11 @@ impl Library {
 
         Library {
             db,
+            player,
+            plugin_system,
+
             import_queue,
-            scan_threads: Arc::new(scan_threads),
+            thread_pool: Arc::new(scan_threads),
         }
     }
 
@@ -62,8 +70,13 @@ impl Library {
         self.db.stats()
     }
 
+    #[instrument(skip(self))]
+    pub fn play(&self, track: UniqueTrackIdentifier) {
+        self.player.queue_track(track);
+    }
+
     #[instrument(skip_all)]
-    pub fn scan(&self, plugin_system: PluginSystem) -> Notification {
+    pub fn scan(&self) -> Notification {
         const PREPARE_SCAN_PROGRESS: f32 = 10.0;
 
         let (notification, notification_handle) = Notification::new_progress("Music Scan");
@@ -75,7 +88,10 @@ impl Library {
         let parent_span = Span::current();
 
         let import_queue = self.import_queue.clone();
-        self.clone().scan_threads.spawn(move || {
+        let thread_pool = self.thread_pool.clone();
+        let plugin_system = self.plugin_system.clone();
+
+        thread_pool.spawn(move || {
             let _span = parent_span.enter();
 
             let plugin_count = plugin_system.plugins.len();
@@ -83,7 +99,7 @@ impl Library {
             let prepared_scans = plugin_system
                 .plugins
                 .par_iter()
-                .filter(|(_, pool)| pool.capabilities.scan_tracks)
+                .filter(|(_, pool)| pool.capabilities.provide_tracks)
                 .filter_map(|(id, pool)| {
                     let _span = info_span!(parent: &parent_span, "prepare_scan").entered();
                     debug!("Preparing scan for plugin '{}'", pool.metadata.name);

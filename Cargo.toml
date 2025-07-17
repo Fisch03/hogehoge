@@ -11,12 +11,14 @@ members = [ "build/*", "plugins/*", "crates/*"]
 hogehoge-types = { path = "crates/types" }
 hogehoge-db = { path = "crates/db" }
 
+rayon = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing = "0.1"
 futures-util = { version = "0.3" }
 
 serde = { version = "1", features = ["derive"] }
+serde_bytes = { version = "0.11" }
 
 lofty = "0.22"
 
@@ -33,7 +35,7 @@ extism-pdk = { git = "https://github.com/Fisch03/rust-pdk", default-features = f
 rodio = { version = "0.21", default-features = false }
 symphonia = { version = "0.5", features = ["all"] }
 
-sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "sqlite", "derive", "migrate", "macros", "uuid" ] }
+sqlx = { version = "0.8", default-features = false, features = [ "runtime-tokio", "sqlite-unbundled", "derive", "migrate", "macros", "uuid" ] }
 # sea-query = { version = "0.32", default-features = false, features = ["derive", "backend-sqlite"] }
 # sea-query-binder = { version = "0.7", features = ["sqlx-sqlite"] }
 
@@ -41,7 +43,7 @@ freya = { git = "https://github.com/marc2332/freya.git", rev = "0b3b7e2504b3599e
 
 glob = "0.3"
 
-toml = "0.8"
+toml = "0.9"
 tar = "0.4"
 
 [package]
@@ -63,13 +65,14 @@ hogehoge-types = { path = "crates/types", features = ["internal"] }
 hogehoge-db.workspace = true
 extism.workspace = true
 
+rayon.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 tracing.workspace = true
 tracing-subscriber = "0.3"
 futures-util.workspace = true
 
-rodio.workspace = true
+rodio = { workspace = true, features = ["playback", "tracing"] }
 
 clap.workspace = true
 nu-ansi-term.workspace = true
@@ -78,7 +81,6 @@ serde.workspace = true
 
 freya.workspace = true
 
-rayon = "1"
 
 thiserror.workspace = true
 

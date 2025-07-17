@@ -1,8 +1,8 @@
 use crate::{AudioFile, PlaybackId, Tags};
 use extism_convert::{FromBytes, Msgpack, ToBytes};
 use serde::{Deserialize, Serialize};
-pub use uuid::{Uuid, uuid};
 use std::time::Duration;
+pub use uuid::{Uuid, uuid};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToBytes, FromBytes, Serialize, Deserialize)]
 #[cfg_attr(feature = "internal", derive(sqlx::Type))]
@@ -10,13 +10,13 @@ use std::time::Duration;
 #[encoding(Msgpack)]
 pub struct PluginId(pub i64);
 
-#[derive(Debug, Clone, PartialEq, Eq, ToBytes, FromBytes, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, ToBytes, FromBytes, Serialize, Deserialize)]
 #[cfg_attr(feature = "internal", derive(sqlx::Type))]
 #[cfg_attr(feature = "internal", sqlx(transparent))]
 #[encoding(Msgpack)]
 pub struct PluginTrackIdentifier(pub String);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "internal", derive(sqlx::FromRow))]
 pub struct UniqueTrackIdentifier {
     pub plugin_id: PluginId,
@@ -59,6 +59,7 @@ pub struct ScanResult {
 pub struct InitDecodingArgs {
     pub playback_id: PlaybackId,
     pub file: AudioFile,
+    pub gapless: bool,
 }
 
 #[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]

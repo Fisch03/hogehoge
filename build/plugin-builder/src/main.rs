@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use nu_ansi_term::Color;
+use rayon::prelude::*;
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -73,18 +74,33 @@ fn main() -> Result<()> {
     } else {
         println!("{}", Color::Blue.bold().paint("Copying plugins..."));
     }
-    for in_path in glob::glob(&glob_pattern).unwrap() {
-        let in_path = in_path?;
 
+    let plugins: Vec<_> = glob::glob(&glob_pattern)
+        .unwrap()
+        .map(|entry| {
+            entry.unwrap_or_else(|e| {
+                panic!("Failed to read plugin path: {}", e);
+            })
+        })
+        .collect();
+
+    plugins.par_iter().for_each(|in_path| {
         let name = in_path.file_name().unwrap();
         let out_path = args.out_dir.join(name);
 
         if args.release {
-            optimize(&in_path, &out_path)?;
+            optimize(&in_path, &out_path).unwrap_or_else(|e| {
+                panic!("Failed to optimize plugin {:?}: {}", in_path, e);
+            });
         } else {
-            std::fs::copy(&in_path, &out_path)?;
+            std::fs::copy(&in_path, &out_path).unwrap_or_else(|e| {
+                panic!(
+                    "Failed to copy plugin {:?} to {:?}: {}",
+                    in_path, out_path, e
+                );
+            });
         }
-    }
+    });
 
     Ok(())
 }
