@@ -1,13 +1,10 @@
 use crate::plugin::{PluginError, PluginHandle, PluginSystem};
+use crate::queue::{Queue, QueueUpdate, QueueUpdateRx};
 use hogehoge_types::{
     AudioFile, ChannelCount, PlaybackId, PluginId, Sample, SampleRate, UniqueTrackIdentifier,
 };
 use rodio::{OutputStream, OutputStreamBuilder, Source, source::Zero};
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{runtime, sync::oneshot};
 use tracing::*;
@@ -19,25 +16,19 @@ fn make_silence() -> Box<dyn Source + Send> {
 
 pub struct AudioPlayer {
     _output_stream: OutputStream,
-    queue: Arc<Mutex<Queue>>,
+    pub queue: Arc<Queue>,
 }
 
-struct QueueSource {
+pub struct QueueSource {
     current_playing: Box<dyn Source + Send>,
-    queue: Arc<Mutex<Queue>>,
-}
-
-#[derive(Debug)]
-struct Queue {
-    items: Vec<UniqueTrackIdentifier>,
-    cache: HashMap<
+    cache: Option<(
         UniqueTrackIdentifier,
         oneshot::Receiver<Result<PluginAudioSource, PluginAudioSourceError>>,
-    >,
-    rt: runtime::Handle,
-    plugin_system: PluginSystem,
+    )>,
 
-    current_index: usize,
+    rt: runtime::Handle,
+    queue: Arc<Queue>,
+    update_rx: QueueUpdateRx,
 }
 
 impl AudioPlayer {
@@ -45,22 +36,16 @@ impl AudioPlayer {
         let _output_stream = OutputStreamBuilder::open_default_stream()
             .expect("Failed to open default audio output stream");
 
-        let (queue, src) = Queue::new(plugins);
+        let queue = Queue::new(plugins);
 
-        _output_stream.mixer().add(src);
+        let queue_src = QueueSource::new(queue.clone());
+
+        _output_stream.mixer().add(queue_src);
 
         Arc::new(AudioPlayer {
             _output_stream,
             queue,
         })
-    }
-
-    pub fn queue_track(&self, track: UniqueTrackIdentifier) {
-        let mut queue = self.queue.lock().unwrap();
-
-        info!("Queued track: {:?}", track);
-        queue.items.push(track.clone());
-        queue.ensure_upcoming_cache();
     }
 }
 
@@ -72,76 +57,109 @@ impl std::fmt::Debug for AudioPlayer {
     }
 }
 
-impl Queue {
-    pub fn new(plugins: PluginSystem) -> (Arc<Mutex<Queue>>, QueueSource) {
+impl QueueSource {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        let current_playing = make_silence();
+        let update_rx = queue.subscribe_updates();
+
         let rt = runtime::Handle::current();
 
-        let queue = Arc::new(Mutex::new(Queue {
-            items: Vec::new(),
-            cache: HashMap::new(),
-            current_index: 0,
+        QueueSource {
+            current_playing,
+            cache: None,
+            queue,
             rt,
-            plugin_system: plugins,
-        }));
-
-        let src = QueueSource {
-            queue: queue.clone(),
-            current_playing: make_silence(),
-        };
-
-        (queue, src)
-    }
-
-    fn ensure_upcoming_cache(&mut self) {
-        if let Some(next_track) = self.items.get(self.current_index) {
-            if !self.cache.contains_key(next_track) {
-                self.start_cache(next_track.clone());
-            }
+            update_rx,
         }
     }
 
     fn start_cache(
-        &mut self,
+        &self,
         track: UniqueTrackIdentifier,
     ) -> oneshot::Receiver<Result<PluginAudioSource, PluginAudioSourceError>> {
         let (tx, rx) = oneshot::channel();
 
         info!("Starting cache for track: {:?}", track);
 
-        let plugin_system = self.plugin_system.clone();
+        let plugin_system = self.queue.plugin_system.clone();
         self.rt.spawn_blocking(move || {
-            let audio_source =
-                PluginAudioSource::from_track_identifier(&plugin_system, track.clone());
+            let audio_source = PluginAudioSource::from_track_identifier(&plugin_system, track);
 
-            if tx.send(audio_source).is_err() {
-                warn!("Failed to send cached track for {:?}", track);
-            }
+            let _ = tx.send(audio_source);
         });
 
         rx
     }
 
-    pub fn cache_track(&mut self, track: UniqueTrackIdentifier) {
-        let rx = self.start_cache(track.clone());
+    fn cache_track(&mut self, track: UniqueTrackIdentifier) {
+        if matches!(&self.cache, Some((cached_id, _)) if *cached_id == track) {
+            debug!("Track {:?} is already cached", track);
+            return;
+        }
 
-        self.cache.insert(track, rx);
+        self.cache = Some((track.clone(), self.start_cache(track)));
     }
 
-    pub fn get_loaded_track(
+    fn get_cached_source(
         &mut self,
-        track_id: &UniqueTrackIdentifier,
+        track: &UniqueTrackIdentifier,
     ) -> Result<PluginAudioSource, PluginAudioSourceError> {
-        let rx = self.cache.remove(track_id).unwrap_or_else(|| {
-            warn!("Track {:?} wasnt precached, starting cache now", track_id);
-            self.start_cache(track_id.clone())
-        });
+        let rx = self
+            .cache
+            .take()
+            .filter(|(cached_id, _)| cached_id == track)
+            .map(|(_, rx)| rx)
+            .unwrap_or_else(|| self.start_cache(track.clone()));
 
         match rx.blocking_recv() {
             Ok(result) => result,
+
             Err(_) => {
-                error!("Failed to receive cached track for {:?}", track_id);
+                error!("Failed to receive cached track for {:?}", track);
                 Err(PluginAudioSourceError::NoAudioData)
             }
+        }
+    }
+}
+
+impl Iterator for QueueSource {
+    type Item = Sample;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Ok(update) = self.update_rx.try_recv() {
+                match update {
+                    QueueUpdate::CurrentTrackChanged | QueueUpdate::TrackAdded(_) => {
+                        if let Some(upcoming) = self.queue.get_next_track() {
+                            self.cache_track(upcoming);
+                        }
+                    }
+                }
+            }
+
+            if let Some(current) = self.current_playing.next() {
+                return Some(current);
+            }
+
+            let upcoming = self.queue.forward();
+
+            let source = upcoming
+                .and_then(|upcoming| match self.get_cached_source(&upcoming) {
+                    Ok(source) => {
+                        info!("Playing next track: {:?}", upcoming);
+                        Some(Box::new(source) as Box<dyn Source + Send>)
+                    }
+                    Err(e) => {
+                        warn!("Failed to get cached source for {:?}: {}", upcoming, e);
+                        None
+                    }
+                })
+                .unwrap_or_else(|| {
+                    trace!("No more tracks in the queue, playing silence");
+                    make_silence()
+                });
+
+            self.current_playing = source;
         }
     }
 }
@@ -172,44 +190,6 @@ impl Source for QueueSource {
 
     fn total_duration(&self) -> Option<Duration> {
         None
-    }
-}
-
-impl Iterator for QueueSource {
-    type Item = Sample;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(current) = self.current_playing.next() {
-                return Some(current);
-            }
-
-            let mut queue = self.queue.lock().unwrap();
-
-            let source = queue
-                .items
-                .get(queue.current_index)
-                .cloned()
-                .and_then(|track_id| match queue.get_loaded_track(&track_id) {
-                    Ok(audio_source) => {
-                        queue.current_index += 1;
-                        queue.ensure_upcoming_cache();
-
-                        info!("Playing track: {:?}", track_id);
-                        Some(Box::new(audio_source) as Box<dyn Source + Send>)
-                    }
-                    Err(e) => {
-                        error!("Failed to load track {:?}: {}", track_id, e);
-                        None
-                    }
-                })
-                .unwrap_or_else(|| {
-                    trace!("Queue is empty, returning silence");
-                    make_silence()
-                });
-
-            self.current_playing = source;
-        }
     }
 }
 
@@ -268,7 +248,7 @@ impl PluginAudioSource {
             .decode_block(playback_id)?
             .ok_or(PluginAudioSourceError::NoAudioData)?;
 
-        info!("Initialized decoding for {:?}", playback_id);
+        debug!("Initialized decoding for {:?}", playback_id);
 
         Ok(PluginAudioSource {
             playback_id,
@@ -371,6 +351,6 @@ impl Drop for PluginAudioSource {
                 );
             });
 
-        info!("Finished decoding for {:?}", self.playback_id);
+        debug!("Finished decoding for {:?}", self.playback_id);
     }
 }

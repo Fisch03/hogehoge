@@ -6,6 +6,7 @@ mod library;
 use library::Library;
 
 mod audio;
+mod queue;
 
 mod plugin;
 use plugin::PluginSystem;

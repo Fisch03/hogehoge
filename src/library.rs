@@ -72,7 +72,7 @@ impl Library {
 
     #[instrument(skip(self))]
     pub fn play(&self, track: UniqueTrackIdentifier) {
-        self.player.queue_track(track);
+        self.player.queue.push(track);
     }
 
     #[instrument(skip_all)]
