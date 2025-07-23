@@ -5,6 +5,7 @@ use hogehoge_db::Database;
 use hogehoge_types::{TagKind, Track, TrackId};
 
 use crate::Library;
+use crate::audio::AudioPlayer;
 use crate::ui::*;
 
 #[component]
@@ -207,7 +208,7 @@ pub fn LibraryView() -> Element {
 #[component]
 pub fn LibraryItem(index: usize, track: ReadOnlySignal<Track>) -> Element {
     let theme = use_context::<Theme>();
-    let library = use_context_resource::<Library>()?;
+    let player = use_context_resource::<AudioPlayer>()?;
 
     const CELLS: &[TagKind] = &[
         TagKind::TrackTitle,
@@ -241,7 +242,7 @@ pub fn LibraryItem(index: usize, track: ReadOnlySignal<Track>) -> Element {
         onmouseenter: move |_| state.set(State::Hovered),
         onmouseleave: move |_| state.set(State::Idle),
         onmousedown: move |_| {
-            library.read().play(
+            player.read().queue.push(
                 track.read().identifier.clone()
             );
 

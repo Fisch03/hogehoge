@@ -38,5 +38,6 @@ run: _build-plugins _build-themes
 run-release: _build-plugins-release _build-themes
     @echo -e "\nBuilding 2hoge..."
     @cargo run --release -- --plugin-dir "{{plugin_out}}" --theme-dir "{{theme_out}}"
-    
+run-flamegraph: _build-plugins-release _build-themes
+    @CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin 2hoge -F 100 -- --plugin-dir "{{plugin_out}}" --theme-dir "{{theme_out}}"
 

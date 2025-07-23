@@ -29,8 +29,6 @@ pub fn get_metadata() -> FnResult<PluginMetadata> {
         author: None,
 
         fs_mounts: vec![],
-
-        allow_concurrency: true,
     })
 }
 

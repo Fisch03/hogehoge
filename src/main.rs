@@ -1,12 +1,14 @@
 use clap::Parser;
 use hogehoge_db::{Database, DbStats};
 use std::path::PathBuf;
+use tokio::task;
 
 mod library;
 use library::Library;
 
 mod audio;
 mod queue;
+use audio::AudioPlayer;
 
 mod plugin;
 use plugin::PluginSystem;
@@ -127,6 +129,16 @@ fn ContextProvider(children: Element) -> Element {
         let db = db_clone.peek().clone();
         let plugin_system = plugin_system_clone.peek().clone();
         async move { Library::new(db, plugin_system).await }
+    });
+
+    let plugin_system_clone = plugin_system.clone();
+    use_resource_provider("Player", move || {
+        let plugin_system = plugin_system_clone.peek().clone();
+        async {
+            task::spawn_blocking(|| AudioPlayer::new(plugin_system))
+                .await
+                .unwrap()
+        }
     });
 
     use_notification_provider();

@@ -21,8 +21,6 @@ pub fn get_metadata() -> FnResult<PluginMetadata> {
             internal_path: "/music".to_string(),
             description: "Music files".to_string(),
         }],
-
-        allow_concurrency: true,
     })
 }
 

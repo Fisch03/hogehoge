@@ -32,7 +32,6 @@ pub struct PluginMetadata {
     pub author: Option<String>,
 
     pub fs_mounts: Vec<FsMount>,
-    pub allow_concurrency: bool,
 }
 
 #[derive(Debug, Clone, ToBytes, FromBytes, Serialize, Deserialize)]

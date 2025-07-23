@@ -10,7 +10,6 @@ use rayon::{ThreadPool, prelude::*};
 use tokio::sync::mpsc;
 use tracing::*;
 
-use crate::audio::AudioPlayer;
 use crate::plugin::PluginSystem;
 use crate::ui::notifications::*;
 
@@ -20,7 +19,6 @@ pub struct Library {
     plugin_system: PluginSystem,
     import_queue: mpsc::Sender<(UniqueTrackIdentifier, ScanResult)>,
     db: Database,
-    player: Arc<AudioPlayer>,
 }
 
 // since bulk inserting cannot be done in parallel on a sqlite database, use a separate worker
@@ -32,8 +30,6 @@ struct LibraryImportWorker {
 
 impl Library {
     pub async fn new(db: Database, plugin_system: PluginSystem) -> Self {
-        let player = AudioPlayer::new(plugin_system.clone());
-
         // we cant use the global rayon thread pool because that one is also used by freya for
         // rendering, so hogging it during scans would cause the UI to freeze
         let scan_threads = rayon::ThreadPoolBuilder::new()
@@ -58,7 +54,6 @@ impl Library {
 
         Library {
             db,
-            player,
             plugin_system,
 
             import_queue,
@@ -68,11 +63,6 @@ impl Library {
 
     pub fn stats(&self) -> Signal<DbStats, SyncStorage> {
         self.db.stats()
-    }
-
-    #[instrument(skip(self))]
-    pub fn play(&self, track: UniqueTrackIdentifier) {
-        self.player.queue.push(track);
     }
 
     #[instrument(skip_all)]
@@ -104,7 +94,7 @@ impl Library {
                     let _span = info_span!(parent: &parent_span, "prepare_scan").entered();
                     debug!("Preparing scan for plugin '{}'", pool.metadata.name);
 
-                    let mut plugin = pool.get_free_plugin();
+                    let mut plugin = pool.get_plugin();
 
                     let result = match plugin.prepare_scan() {
                         Ok(prepared_scan) => {
@@ -148,8 +138,7 @@ impl Library {
                     prepared_scan.tracks.into_par_iter().for_each(|track| {
                         let _span = parent_span.enter();
 
-                        let mut plugin =
-                            plugin_system.get_free_plugin(id).expect("Plugin not found");
+                        let mut plugin = plugin_system.get_plugin(id).expect("Plugin not found");
 
                         match plugin.scan(&track) {
                             Ok(result) => {
@@ -182,7 +171,6 @@ impl Library {
                     });
                 });
 
-            plugin_system.cleanup_pool();
             info!("Music scan completed.");
 
             notification_handle.complete();

@@ -11,6 +11,7 @@ use std::{
     sync::{Arc, Condvar, Mutex},
 };
 use thiserror::Error;
+use tokio::time;
 use tracing::*;
 
 #[derive(Debug, Clone)]
@@ -158,50 +159,58 @@ impl Plugin {
 }
 
 impl PluginPool {
-    pub fn try_new(path: &Path) -> Result<Self, PluginError> {
+    pub fn try_new(path: &Path) -> Result<Arc<Self>, PluginError> {
         let mut plugin = Plugin::try_load(path)?;
         let metadata = plugin.get_metadata()?;
 
-        Ok(PluginPool {
+        let pool = Arc::new(PluginPool {
             metadata,
             capabilities: PluginCapabilities::from_plugin(&plugin),
             plugin_path: path.to_path_buf(),
-            plugins: Mutex::new(VecDeque::from([plugin])),
+            plugins: Mutex::new(VecDeque::new()),
             wait_condvar: Condvar::new(),
-        })
+        });
+
+        tokio::spawn({
+            let pool = pool.clone();
+            async move {
+                let mut interval = time::interval(time::Duration::from_secs(30));
+
+                loop {
+                    interval.tick().await;
+                    trace!(
+                        "Performing plugin cleanup for plugin '{}'",
+                        pool.metadata.name
+                    );
+
+                    let mut plugins = pool.plugins.lock().unwrap();
+                    if !plugins.is_empty() {
+                        info!(
+                            "Cleaning up {} idle instances of plugin '{}'",
+                            plugins.len(),
+                            pool.metadata.name
+                        );
+                        plugins.clear();
+                    }
+                }
+            }
+        });
+
+        Ok(pool)
     }
 
-    pub fn get_free_plugin(self: &Arc<Self>) -> PluginHandle {
+    pub fn get_plugin(self: &Arc<Self>) -> PluginHandle {
         let mut plugins = self.plugins.lock().unwrap();
         if let Some(plugin) = plugins.pop_front() {
             PluginHandle::new(self.clone(), plugin)
         } else {
-            if self.metadata.allow_concurrency {
-                info!(
-                    "Creating new instance for plugin: {} ({})",
-                    self.metadata.name, self.metadata.uuid
-                );
-                match Plugin::try_load(&self.plugin_path) {
-                    Ok(plugin) => {
-                        return PluginHandle::new(self.clone(), plugin);
-                    }
+            info!(
+                "Creating new instance for plugin: {} ({})",
+                self.metadata.name, self.metadata.uuid
+            );
 
-                    Err(e) => {
-                        error!(
-                            "Failed to create instance of plugin, falling back to waiting for a free one: {}",
-                            e
-                        );
-                    }
-                }
-            }
-
-            // wait for a free plugin
-            loop {
-                plugins = self.wait_condvar.wait(plugins).unwrap();
-                if let Some(plugin) = plugins.pop_front() {
-                    return PluginHandle::new(self.clone(), plugin);
-                }
-            }
+            let plugin = Plugin::try_load(&self.plugin_path).expect("Plugin loading to never fail");
+            PluginHandle::new(self.clone(), plugin)
         }
     }
 }
@@ -290,7 +299,7 @@ impl PluginSystem {
                     continue;
                 }
             };
-            plugins.insert(id, Arc::new(pool));
+            plugins.insert(id, pool);
         }
 
         info!("Loaded {} plugins", plugins.len());
@@ -300,17 +309,7 @@ impl PluginSystem {
         })
     }
 
-    pub fn get_free_plugin(&self, id: PluginId) -> Option<PluginHandle> {
-        self.plugins.get(&id).map(|pool| pool.get_free_plugin())
-    }
-
-    pub fn cleanup_pool(&self) {
-        debug!("Cleaning up plugin pool...");
-        for pool in self.plugins.values() {
-            let mut plugins = pool.plugins.lock().unwrap();
-            while plugins.len() > 1 {
-                plugins.pop_back();
-            }
-        }
+    pub fn get_plugin(&self, id: PluginId) -> Option<PluginHandle> {
+        self.plugins.get(&id).map(|pool| pool.get_plugin())
     }
 }
